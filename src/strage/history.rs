@@ -1,0 +1,104 @@
+use rusqlite::Connection;
+use std::sync::Mutex;
+
+pub struct HistoryStore {
+    conn: Mutex<Connection>,
+}
+
+impl HistoryStore {
+    pub fn new(db_path: &str) -> anyhow::Result<Self> {
+        let conn = Connection::open(db_path)?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_at)",
+            [],
+        )?;
+
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    pub fn save_message(
+    &self,
+    channel_id: &str,
+    author_id: &str,
+    role: &str,
+    content: &str,
+    embedding: &[f32],   // ← この引数が抜けているはず
+) -> anyhow::Result<()> {
+    let conn = self.conn.lock().unwrap();
+    let now = chrono_now();
+    let blob = f32_to_bytes(embedding);
+    conn.execute(
+        "INSERT INTO messages (channel_id, author_id, role, content, embedding, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![channel_id, author_id, role, content, blob, now],
+    )?;
+    Ok(())
+}
+
+    pub fn get_recent_history(
+        &self,
+        channel_id: &str,
+        limit: i64,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT role, content FROM messages
+             WHERE channel_id = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2",
+        )?;
+
+        let rows = stmt.query_map(rusqlite::params![channel_id, limit], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        let mut result: Vec<(String, String)> = rows.filter_map(|r| r.ok()).collect();
+        result.reverse(); // 古い順に並べ直す(AIへのプロンプトは時系列順が自然)
+        Ok(result)
+    }
+
+    pub fn get_candidates_for_search(
+        &self,
+        channel_id: &str,
+        window: i64,
+    ) -> anyhow::Result<Vec<(String, Vec<f32>)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT content, embedding FROM messages
+             WHERE channel_id = ?1 AND embedding IS NOT NULL
+             ORDER BY created_at DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![channel_id, window], |row| {
+            let content: String = row.get(0)?;
+            let blob: Vec<u8> = row.get(1)?;
+            Ok((content, bytes_to_f32(&blob)))
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+}
+
+fn chrono_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+pub fn f32_to_bytes(v: &[f32]) -> Vec<u8> {
+    v.iter().flat_map(|f| f.to_le_bytes()).collect()
+}
+
+pub fn bytes_to_f32(b: &[u8]) -> Vec<f32> {
+    b.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect()
+}

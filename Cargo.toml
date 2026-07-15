@@ -1,0 +1,23 @@
+[package]
+name = "discord_ai_bot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+twilight-gateway = "0.16"
+twilight-http = "0.16"
+twilight-model = "0.16"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+anyhow = "1.0.103"
+dotenvy = "0.15"
+gcp_auth = "0.12"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+strip = true
