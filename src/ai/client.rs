@@ -109,7 +109,10 @@ impl AiClient {
         self.project_id, self.model
     );
 
-    let body = json!({ "contents": contents });
+    let body = json!({
+        "contents": contents,
+        "tools": [{ "url_context": {} }]
+    });
 
     let res = self.http
         .post(&url)
@@ -119,6 +122,8 @@ impl AiClient {
         .await?;
 
     let json_res: serde_json::Value = res.json().await?;
+
+    println!("生レスポンス: {}", serde_json::to_string_pretty(&json_res)?);
 
     let text = json_res["candidates"][0]["content"]["parts"][0]["text"]
         .as_str()
