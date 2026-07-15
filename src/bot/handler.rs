@@ -3,6 +3,8 @@ use twilight_model::gateway::payload::incoming::MessageCreate;
 use twilight_model::id::Id;
 use twilight_model::id::marker::UserMarker;
 use std::sync::Arc;
+use base64::{engine::general_purpose, Engine as _};
+use serde_json::json;
 use crate::ai::client::AiClient;
 use crate::ai::embedding::EmbeddingClient;
 use crate::strage::history::HistoryStore;
@@ -31,7 +33,11 @@ pub async fn handle_message(
         .collect::<Vec<_>>()
         .join(" ");
 
-    if cleaned.trim().is_empty() {
+    // 画像添付が無く、テキストも空ならスキップ
+    let has_images = msg.attachments.iter().any(|a| {
+        a.content_type.as_deref().unwrap_or("").starts_with("image/")
+    });
+    if cleaned.trim().is_empty() && !has_images {
         return;
     }
 
@@ -40,43 +46,75 @@ pub async fn handle_message(
 
     let _ = http.create_typing_trigger(msg.channel_id).await;
 
-    // 1. ユーザー発言のEmbeddingを生成して保存(RETRIEVAL_DOCUMENT)
+    // 1. 画像添付をダウンロードしてBase64化
+    let download_client = reqwest::Client::new();
+    let mut image_parts: Vec<serde_json::Value> = Vec::new();
+
+    for attachment in &msg.attachments {
+        let content_type = attachment.content_type.as_deref().unwrap_or("");
+        if !content_type.starts_with("image/") {
+            continue;
+        }
+        match download_client.get(&attachment.url).send().await {
+            Ok(res) => match res.bytes().await {
+                Ok(bytes) => {
+                    let encoded = general_purpose::STANDARD.encode(&bytes);
+                    image_parts.push(json!({
+                        "inlineData": {
+                            "mimeType": content_type,
+                            "data": encoded
+                        }
+                    }));
+                }
+                Err(e) => eprintln!("画像バイト取得エラー: {:?}", e),
+            },
+            Err(e) => eprintln!("画像ダウンロードエラー: {:?}", e),
+        }
+    }
+
+    // 2. Embedding生成・履歴保存はテキストのみ対象(画像はEmbeddingしない簡易実装)
+    let embed_text = if cleaned.trim().is_empty() { "[画像添付]".to_string() } else { cleaned.clone() };
     let user_embedding = embedding_client
-        .embed(&cleaned, "RETRIEVAL_DOCUMENT")
+        .embed(&embed_text, "RETRIEVAL_DOCUMENT")
         .await
         .unwrap_or_default();
 
-    if let Err(e) = history.save_message(&channel_id, &author_id, "user", &cleaned, &user_embedding) {
+    if let Err(e) = history.save_message(&channel_id, &author_id, "user", &embed_text, &user_embedding) {
         eprintln!("履歴保存エラー: {:?}", e);
     }
 
-    // 2. クエリ用Embeddingで直近の関連発言を検索(RETRIEVAL_QUERY)
+    // 3. RAG検索(テキストベース)
     let query_embedding = embedding_client
-        .embed(&cleaned, "RETRIEVAL_QUERY")
+        .embed(&embed_text, "RETRIEVAL_QUERY")
         .await
         .unwrap_or_default();
-
-    let candidates = history
-        .get_candidates_for_search(&channel_id, 300)
-        .unwrap_or_default();
-
+    let candidates = history.get_candidates_for_search(&channel_id, 300).unwrap_or_default();
     let relevant = rag::rag::search_similar(&candidates, &query_embedding, 3);
 
-    // 3. 直近の会話履歴(時系列)も取得
+    // 4. 直近の会話履歴
     let recent = history.get_recent_history(&channel_id, 10).unwrap_or_default();
 
-    // 4. 関連発言をプロンプトの先頭に「参考情報」として追加
-    let mut contents: Vec<(String, String)> = Vec::new();
-    if !relevant.is_empty() {
-        let context_text = format!(
-            "(過去の関連する会話)\n{}",
-            relevant.join("\n")
-        );
-        contents.push(("user".to_string(), context_text));
-    }
-    contents.extend(recent);
+    // 5. contents配列を組み立て(過去分はテキストのみ、今回分だけ画像を含める)
+    let mut contents: Vec<serde_json::Value> = Vec::new();
 
-    match ai_client.generate_with_history(&contents).await {
+    if !relevant.is_empty() {
+        let context_text = format!("(過去の関連する会話)\n{}", relevant.join("\n"));
+        contents.push(json!({ "role": "user", "parts": [{ "text": context_text }] }));
+    }
+
+    for (role, text) in &recent {
+        contents.push(json!({ "role": role, "parts": [{ "text": text }] }));
+    }
+
+    // 今回のメッセージ: テキスト + 画像パーツをまとめて1つのcontentに
+    let mut current_parts: Vec<serde_json::Value> = Vec::new();
+    if !cleaned.trim().is_empty() {
+        current_parts.push(json!({ "text": cleaned }));
+    }
+    current_parts.extend(image_parts);
+    contents.push(json!({ "role": "user", "parts": current_parts }));
+
+    match ai_client.generate_with_contents(contents).await {
         Ok(response) => {
             let _ = http.create_message(msg.channel_id).content(&response).await;
 
