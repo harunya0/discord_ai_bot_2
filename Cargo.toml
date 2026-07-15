@@ -15,6 +15,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 anyhow = "1.0.103"
 dotenvy = "0.15"
 gcp_auth = "0.12"
+base64 = "0.22"
 
 [profile.release]
 lto = true

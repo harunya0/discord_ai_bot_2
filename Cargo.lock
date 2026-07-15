@@ -199,6 +199,7 @@ name = "discord_ai_bot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "dotenvy",
  "gcp_auth",
  "reqwest",
