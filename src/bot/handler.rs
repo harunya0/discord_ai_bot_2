@@ -3,6 +3,8 @@ use twilight_model::gateway::payload::incoming::MessageCreate;
 use twilight_model::id::Id;
 use twilight_model::id::marker::UserMarker;
 use std::sync::Arc;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 use base64::{engine::general_purpose, Engine as _};
 use serde_json::json;
 use crate::ai::client::AiClient;
@@ -10,15 +12,61 @@ use crate::ai::embedding::EmbeddingClient;
 use crate::strage::history::HistoryStore;
 use crate::rag;
 
+const ALLOWED_MODELS: [&str; 3] = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-pro",
+]; 
+
 pub async fn handle_message(
     msg: Box<MessageCreate>,
     http: Arc<HttpClient>,
     ai_client: Arc<AiClient>,
     embedding_client: Arc<EmbeddingClient>,
     history: Arc<HistoryStore>,
+    channel_models: Arc<RwLock<HashMap<u64, String>>>,
     bot_id: Id<UserMarker>,
 ) {
     if msg.author.bot {
+        return;
+    }
+
+    if msg.content.starts_with("!c") {
+        let arg = msg.content.trim_start_matches("!c").trim();
+
+        if arg.is_empty() {
+            let current = channel_models
+                .read()
+                .await
+                .get(&msg.channel_id.get())
+                .cloned()
+                .unwrap_or_else(|| "gemini-3.1-flash-lite (デフォルト)".to_string());
+            let _ = http
+                .create_message(msg.channel_id)
+                .content(&format!(
+                    "現在のモデル: {}\n選択可能: {}",
+                    current,
+                    ALLOWED_MODELS.join(", ")
+                ))
+                .await;
+            return;
+        }
+
+        if ALLOWED_MODELS.contains(&arg) {
+            channel_models.write().await.insert(msg.channel_id.get(), arg.to_string());
+            let _ = http
+                .create_message(msg.channel_id)
+                .content(&format!("モデルを {} に切り替えました", arg))
+                .await;
+        } else {
+            let _ = http
+                .create_message(msg.channel_id)
+                .content(&format!(
+                    "無効なモデル名です。選択可能: {}",
+                    ALLOWED_MODELS.join(", ")
+                ))
+                .await;
+        }
         return;
     }
 
@@ -114,7 +162,14 @@ pub async fn handle_message(
     current_parts.extend(image_parts);
     contents.push(json!({ "role": "user", "parts": current_parts }));
 
-    match ai_client.generate_with_contents(contents).await {
+    let model = channel_models
+        .read()
+        .await
+        .get(&msg.channel_id.get())
+        .cloned()
+        .unwrap_or_else(|| "gemini-3.1-flash-lite".to_string());
+
+    match ai_client.generate_with_contents(contents, &model).await {
         Ok(response) => {
             let _ = http.create_message(msg.channel_id).content(&response).await;
 

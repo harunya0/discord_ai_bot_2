@@ -9,6 +9,7 @@ use twilight_model::id::Id;
 use twilight_model::id::marker::UserMarker;
 use std::env;
 use std::sync::Arc;
+use std::collections::HashMap;
 use tokio::sync::RwLock;
 use ai::client::AiClient;
 use ai::embedding::EmbeddingClient;
@@ -39,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
 
     let bot_id: Arc<RwLock<Option<Id<UserMarker>>>> = Arc::new(RwLock::new(None));
     let history_store = Arc::new(HistoryStore::new("./data/history.db")?);
+    let channel_models: Arc<RwLock<HashMap<u64, String>>> = Arc::new(RwLock::new(HashMap::new()));
 
     let event_types = EventTypeFlags::READY
         | EventTypeFlags::MESSAGE_CREATE
@@ -68,10 +70,11 @@ async fn main() -> anyhow::Result<()> {
                 let embedding_client = Arc::clone(&embedding_client);
                 let history_store = Arc::clone(&history_store);
                 let bot_id = Arc::clone(&bot_id);
+                let channel_models = Arc::clone(&channel_models);
                 tokio::spawn(async move {
                     let id = *bot_id.read().await;
                     if let Some(id) = id {
-                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, id).await;
+                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id).await;
                     }
                 });
             }
