@@ -36,7 +36,7 @@ impl HistoryStore {
     author_id: &str,
     role: &str,
     content: &str,
-    embedding: &[f32],   // ← この引数が抜けているはず
+    embedding: &[f32],
 ) -> anyhow::Result<()> {
     let conn = self.conn.lock().unwrap();
     let now = chrono_now();
