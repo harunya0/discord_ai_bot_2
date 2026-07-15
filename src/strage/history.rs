@@ -15,6 +15,7 @@ impl HistoryStore {
                 author_id TEXT NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
+                embedding BLOB,
                 created_at INTEGER NOT NULL
             )",
             [],
