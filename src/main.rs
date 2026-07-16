@@ -28,6 +28,8 @@ async fn main() -> anyhow::Result<()> {
     let model = env::var("GCP_MODEL").unwrap_or_else(|_| "gemini-3.1-flash-lite".to_string());
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap_or_default();
     let openai_client = Arc::new(OpenAiClient::new(openai_api_key));
+    let channel_sessions: Arc<RwLock<HashMap<u64, String>>> = Arc::new(RwLock::new(HashMap::new()));
+    
 
     let ai_client = Arc::new(
         AiClient::new(&credentials_path, project_id.clone(), location, model).await?
@@ -75,10 +77,11 @@ async fn main() -> anyhow::Result<()> {
                 let bot_id = Arc::clone(&bot_id);
                 let channel_models = Arc::clone(&channel_models);
                 let openai_client = Arc::clone(&openai_client);
+                let channel_sessions = Arc::clone(&channel_sessions);
                 tokio::spawn(async move {
                     let id = *bot_id.read().await;
                     if let Some(id) = id {
-                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client).await;
+                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client, channel_sessions).await;
                     }
                 });
             }
