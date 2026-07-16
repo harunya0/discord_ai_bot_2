@@ -21,6 +21,13 @@ const ALLOWED_MODELS: [&str; 5] = [
     "gpt-4o",
 ];
 
+const TEXT_EXTENSIONS: [&str; 15] = [
+    "txt", "md", "rs", "py", "js", "ts", "json", "toml", "yaml", "yml",
+    "csv", "html", "css", "c", "cpp",
+];
+
+const MAX_FILE_CHARS: usize = 8000; 
+
 pub async fn handle_message(
     msg: Box<MessageCreate>,
     http: Arc<HttpClient>,
@@ -30,6 +37,7 @@ pub async fn handle_message(
     channel_models: Arc<RwLock<HashMap<u64, String>>>,
     bot_id: Id<UserMarker>,
     openai_client: Arc<OpenAiClient>,
+    channel_sessions: Arc<RwLock<HashMap<u64, String>>>
 ) {
     if msg.author.bot {
         return;
@@ -74,6 +82,41 @@ pub async fn handle_message(
         return;
     }
 
+    // !s コマンド処理(セッション切り替え)
+if msg.content.starts_with("!s") {
+    let arg = msg.content.trim_start_matches("!s").trim();
+    let channel_key = msg.channel_id.to_string();
+
+    if arg.is_empty() {
+        let current = channel_sessions
+            .read()
+            .await
+            .get(&msg.channel_id.get())
+            .cloned()
+            .unwrap_or_else(|| "default".to_string());
+
+        let sessions = history.list_sessions(&channel_key).unwrap_or_default();
+        let list = if sessions.is_empty() {
+            "(まだ記録なし)".to_string()
+        } else {
+            sessions.join(", ")
+        };
+
+        let _ = http
+            .create_message(msg.channel_id)
+            .content(&format!("現在のセッション: {}\n既存セッション: {}", current, list))
+            .await;
+        return;
+    }
+
+    channel_sessions.write().await.insert(msg.channel_id.get(), arg.to_string());
+    let _ = http
+        .create_message(msg.channel_id)
+        .content(&format!("セッションを「{}」に切り替えました", arg))
+        .await;
+    return;
+    }
+
     let is_mentioned = msg.mentions.iter().any(|m| m.id == bot_id);
     if !is_mentioned {
         return;
@@ -89,11 +132,23 @@ pub async fn handle_message(
     let has_images = msg.attachments.iter().any(|a| {
         a.content_type.as_deref().unwrap_or("").starts_with("image/")
     });
-    if cleaned.trim().is_empty() && !has_images {
+    let has_files = msg.attachments.iter().any(|a| {
+        let ext = a.filename.rsplit('.').next().unwrap_or("").to_lowercase();
+        TEXT_EXTENSIONS.contains(&ext.as_str())
+    });
+    if cleaned.trim().is_empty() && !has_images && !has_files {
         return;
     }
 
-    let channel_id = msg.channel_id.to_string();
+    let channel_id_raw = msg.channel_id.to_string();
+    let session = channel_sessions
+        .read()
+        .await
+        .get(&msg.channel_id.get())
+        .cloned()
+        .unwrap_or_else(|| "default".to_string());
+    
+    let channel_id = format!("{}:{}", channel_id_raw, session);
     let author_id = msg.author.id.to_string();
 
     let _ = http.create_typing_trigger(msg.channel_id).await;
@@ -123,6 +178,36 @@ pub async fn handle_message(
             Err(e) => eprintln!("画像ダウンロードエラー: {:?}", e),
         }
     }
+
+    let mut file_texts: Vec<String> = Vec::new();
+
+for attachment in &msg.attachments {
+    let filename = &attachment.filename;
+    let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
+
+    if !TEXT_EXTENSIONS.contains(&ext.as_str()) {
+        continue;
+    }
+
+    match download_client.get(&attachment.url).send().await {
+        Ok(res) => match res.text().await {
+            Ok(text) => {
+                let truncated: String = text.chars().take(MAX_FILE_CHARS).collect();
+                let note = if text.chars().count() > MAX_FILE_CHARS {
+                    "\n...(以降省略)"
+                } else {
+                    ""
+                };
+                file_texts.push(format!(
+                    "添付ファイル「{}」の内容:\n```\n{}{}\n```",
+                    filename, truncated, note
+                ));
+            }
+            Err(e) => eprintln!("テキストファイル読み込みエラー: {:?}", e),
+        },
+        Err(e) => eprintln!("テキストファイルダウンロードエラー: {:?}", e),
+    }
+}
 
     // 2. Embedding生成・履歴保存はテキストのみ対象(画像はEmbeddingしない簡易実装)
     let embed_text = if cleaned.trim().is_empty() { "[画像添付]".to_string() } else { cleaned.clone() };
@@ -158,10 +243,19 @@ pub async fn handle_message(
         contents.push(json!({ "role": role, "parts": [{ "text": text }] }));
     }
 
-    // 今回のメッセージ: テキスト + 画像パーツをまとめて1つのcontentに
+    // 今回のメッセージ: テキスト + ファイル内容 + 画像パーツをまとめて1つのcontentに
     let mut current_parts: Vec<serde_json::Value> = Vec::new();
-    if !cleaned.trim().is_empty() {
-        current_parts.push(json!({ "text": cleaned }));
+
+    let mut combined_text = cleaned.clone();
+    if !file_texts.is_empty() {
+        if !combined_text.trim().is_empty() {
+            combined_text.push_str("\n\n");
+        }
+        combined_text.push_str(&file_texts.join("\n\n"));
+    }
+
+    if !combined_text.trim().is_empty() {
+        current_parts.push(json!({ "text": combined_text }));
     }
     current_parts.extend(image_parts);
     contents.push(json!({ "role": "user", "parts": current_parts }));
