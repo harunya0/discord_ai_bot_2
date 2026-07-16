@@ -9,14 +9,17 @@ use base64::{engine::general_purpose, Engine as _};
 use serde_json::json;
 use crate::ai::client::AiClient;
 use crate::ai::embedding::EmbeddingClient;
+use crate::ai::openai::OpenAiClient;
 use crate::strage::history::HistoryStore;
 use crate::rag;
 
-const ALLOWED_MODELS: [&str; 3] = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.5-pro",
-]; 
+const ALLOWED_MODELS: [&str; 5] = [
+    "gemini-3.1-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
+    "gpt-4o-mini",
+    "gpt-4o",
+];
 
 pub async fn handle_message(
     msg: Box<MessageCreate>,
@@ -26,6 +29,7 @@ pub async fn handle_message(
     history: Arc<HistoryStore>,
     channel_models: Arc<RwLock<HashMap<u64, String>>>,
     bot_id: Id<UserMarker>,
+    openai_client: Arc<OpenAiClient>,
 ) {
     if msg.author.bot {
         return;
@@ -169,22 +173,29 @@ pub async fn handle_message(
         .cloned()
         .unwrap_or_else(|| "gemini-3.1-flash-lite".to_string());
 
-    match ai_client.generate_with_contents(contents, &model).await {
-        Ok(response) => {
-            let _ = http.create_message(msg.channel_id).content(&response).await;
+    let response = if model.starts_with("gpt-") {
+    let messages = crate::ai::convert::to_openai_messages(&contents);
+    openai_client.generate(messages, &model).await
+    } else {
+        ai_client.generate_with_contents(contents, &model).await
+    };
 
-            let bot_embedding = embedding_client
-                .embed(&response, "RETRIEVAL_DOCUMENT")
-                .await
-                .unwrap_or_default();
+    match response {
+    Ok(response) => {
+        let _ = http.create_message(msg.channel_id).content(&response).await;
 
-            if let Err(e) = history.save_message(&channel_id, "bot", "model", &response, &bot_embedding) {
-                eprintln!("履歴保存エラー: {:?}", e);
-            }
-        }
-        Err(e) => {
-            eprintln!("AI応答エラー: {:?}", e);
-            let _ = http.create_message(msg.channel_id).content("エラーが発生しました…").await;
+        let bot_embedding = embedding_client
+            .embed(&response, "RETRIEVAL_DOCUMENT")
+            .await
+            .unwrap_or_default();
+
+        if let Err(e) = history.save_message(&channel_id, "bot", "model", &response, &bot_embedding) {
+            eprintln!("履歴保存エラー: {:?}", e);
         }
     }
+    Err(e) => {
+        eprintln!("AI応答エラー: {:?}", e);
+        let _ = http.create_message(msg.channel_id).content("エラーが発生しました…").await;
+    }
+}
 }

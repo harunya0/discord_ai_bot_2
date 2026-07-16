@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use ai::client::AiClient;
+use ai::openai::OpenAiClient;
 use ai::embedding::EmbeddingClient;
 use strage::history::HistoryStore;
 use gcp_auth::CustomServiceAccount;
@@ -25,6 +26,8 @@ async fn main() -> anyhow::Result<()> {
     let project_id = env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_IDが見つかりません");
     let location = env::var("GCP_LOCATION").unwrap_or_else(|_| "global".to_string());
     let model = env::var("GCP_MODEL").unwrap_or_else(|_| "gemini-3.1-flash-lite".to_string());
+    let openai_api_key = env::var("OPENAI_API_KEY").unwrap_or_default();
+    let openai_client = Arc::new(OpenAiClient::new(openai_api_key));
 
     let ai_client = Arc::new(
         AiClient::new(&credentials_path, project_id.clone(), location, model).await?
@@ -71,10 +74,11 @@ async fn main() -> anyhow::Result<()> {
                 let history_store = Arc::clone(&history_store);
                 let bot_id = Arc::clone(&bot_id);
                 let channel_models = Arc::clone(&channel_models);
+                let openai_client = Arc::clone(&openai_client);
                 tokio::spawn(async move {
                     let id = *bot_id.read().await;
                     if let Some(id) = id {
-                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id).await;
+                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client).await;
                     }
                 });
             }
