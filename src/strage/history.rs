@@ -89,20 +89,20 @@ impl HistoryStore {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
     pub fn list_sessions(&self, channel_id: &str) -> anyhow::Result<Vec<String>> {
-    let conn = self.conn.lock().unwrap();
-    let pattern = format!("{}:%", channel_id);
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT channel_id FROM messages WHERE channel_id LIKE ?1"
-    )?;
-    let rows = stmt.query_map(rusqlite::params![pattern], |row| {
-        row.get::<_, String>(0)
-    })?;
-    let sessions: Vec<String> = rows
-        .filter_map(|r| r.ok())
-        .filter_map(|full| full.split(':').nth(1).map(|s| s.to_string()))
-        .collect();
-    Ok(sessions)
-}
+        let conn = self.conn.lock().unwrap();
+        let pattern = format!("{}:%", channel_id);
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT channel_id FROM messages WHERE channel_id LIKE ?1"
+        )?;
+        let rows = stmt.query_map(rusqlite::params![pattern], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let sessions: Vec<String> = rows
+            .filter_map(|r| r.ok())
+            .filter_map(|full| full.split(':').nth(1).map(|s| s.to_string()))
+            .collect();
+        Ok(sessions)
+    }
 
     pub fn delete_session(&self, channel_id: &str, session: &str) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
