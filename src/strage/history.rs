@@ -103,6 +103,13 @@ impl HistoryStore {
         .collect();
     Ok(sessions)
 }
+
+    pub fn delete_session(&self, channel_id: &str, session: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let key = format!("{}:{}", channel_id, session);
+        conn.execute("DELETE FROM messages WHERE channel_id = ?1", rusqlite::params![key])?;
+        Ok(())
+    }
 }
 
 fn chrono_now() -> i64 {

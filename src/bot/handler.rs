@@ -108,6 +108,18 @@ if msg.content.starts_with("!s") {
             .await;
         return;
     }
+    // handler.rs の !s コマンド処理に追加(argが "削除 セッション名" の形式の場合)
+    if let Some(target) = arg.strip_prefix("d ") {
+        let channel_key = msg.channel_id.to_string();
+        if let Err(e) = history.delete_session(&channel_key, target) {
+            eprintln!("セッション削除エラー: {:?}", e);
+        }
+        let _ = http
+            .create_message(msg.channel_id)
+            .content(&format!("セッション「{}」を削除しました", target))
+            .await;
+        return;
+    }
 
     channel_sessions.write().await.insert(msg.channel_id.get(), arg.to_string());
     let _ = http
