@@ -22,6 +22,7 @@ use std::path::Path;
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKENが見つかりません");
+    register_commands(&token).await?;
     let credentials_path = env::var("GCP_CREDENTIALS_PATH").expect("GCP_CREDENTIALS_PATHが見つかりません");
     let project_id = env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_IDが見つかりません");
     let location = env::var("GCP_LOCATION").unwrap_or_else(|_| "global".to_string());
@@ -49,7 +50,8 @@ async fn main() -> anyhow::Result<()> {
 
     let event_types = EventTypeFlags::READY
         | EventTypeFlags::MESSAGE_CREATE
-        | EventTypeFlags::GUILD_CREATE;
+        | EventTypeFlags::GUILD_CREATE
+        | EventTypeFlags::INTERACTION_CREATE;
 
     while let Some(item) = shard.next_event(event_types).await {
         let event = match item {
@@ -85,9 +87,75 @@ async fn main() -> anyhow::Result<()> {
                     }
                 });
             }
+            Event::InteractionCreate(interaction) => {
+                let value = serde_json::to_value(&*interaction).unwrap_or_default();
+                let channel_models = Arc::clone(&channel_models);
+                let channel_sessions = Arc::clone(&channel_sessions);
+                let history_store = Arc::clone(&history_store);
+                tokio::spawn(async move {
+                    bot::interaction::handle_interaction(value, channel_models, channel_sessions, history_store).await;
+                });
+            }
             _ => {}
         }
     }
 
+    Ok(())
+}
+
+async fn register_commands(token: &str) -> anyhow::Result<()> {
+    let client = reqwest::Client::new();
+
+    let app: serde_json::Value = client
+        .get("https://discord.com/api/v10/oauth2/applications/@me")
+        .header("Authorization", format!("Bot {}", token))
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let app_id = app["id"].as_str().ok_or_else(|| anyhow::anyhow!("application idが取得できません"))?;
+
+    let commands = serde_json::json!([
+        {
+            "name": "model",
+            "description": "AIモデルを切り替えます",
+            "type": 1,
+            "options": [{
+                "type": 3,
+                "name": "name",
+                "description": "使用するモデル",
+                "required": true,
+                "choices": [
+                    {"name": "gemini-3.1-flash-lite", "value": "gemini-3.1-flash-lite"},
+                    {"name": "gemini-3-flash-preview", "value": "gemini-3-flash-preview"},
+                    {"name": "gemini-3.1-pro-preview", "value": "gemini-3.1-pro-preview"},
+                    {"name": "gpt-4o-mini", "value": "gpt-4o-mini"},
+                    {"name": "gpt-4o", "value": "gpt-4o"}
+                ]
+            }]
+        },
+        {
+            "name": "session",
+            "description": "会話セッションを切り替え/確認します",
+            "type": 1,
+            "options": [{
+                "type": 3,
+                "name": "name",
+                "description": "セッション名(空欄で一覧表示)",
+                "required": false
+            }]
+        }
+    ]);
+
+    let url = format!("https://discord.com/api/v10/applications/{}/commands", app_id);
+    let res = client
+        .put(&url)
+        .header("Authorization", format!("Bot {}", token))
+        .json(&commands)
+        .send()
+        .await?;
+
+    println!("コマンド登録結果: {}", res.status());
     Ok(())
 }
