@@ -13,14 +13,6 @@ use crate::ai::openai::OpenAiClient;
 use crate::strage::history::HistoryStore;
 use crate::rag;
 
-const ALLOWED_MODELS: [&str; 5] = [
-    "gemini-3.1-flash-lite",
-    "gemini-3-flash-preview",
-    "gemini-3.1-pro-preview",
-    "gpt-4o-mini",
-    "gpt-4o",
-];
-
 const TEXT_EXTENSIONS: [&str; 15] = [
     "txt", "md", "rs", "py", "js", "ts", "json", "toml", "yaml", "yml",
     "csv", "html", "css", "c", "cpp",
@@ -41,92 +33,6 @@ pub async fn handle_message(
 ) {
     if msg.author.bot {
         return;
-    }
-
-    if msg.content.starts_with("!c") {
-        let arg = msg.content.trim_start_matches("!c").trim();
-
-        if arg.is_empty() {
-            let current = channel_models
-                .read()
-                .await
-                .get(&msg.channel_id.get())
-                .cloned()
-                .unwrap_or_else(|| "gemini-3.1-flash-lite (デフォルト)".to_string());
-            let _ = http
-                .create_message(msg.channel_id)
-                .content(&format!(
-                    "現在のモデル: {}\n選択可能: {}",
-                    current,
-                    ALLOWED_MODELS.join(", ")
-                ))
-                .await;
-            return;
-        }
-
-        if ALLOWED_MODELS.contains(&arg) {
-            channel_models.write().await.insert(msg.channel_id.get(), arg.to_string());
-            let _ = http
-                .create_message(msg.channel_id)
-                .content(&format!("モデルを {} に切り替えました", arg))
-                .await;
-        } else {
-            let _ = http
-                .create_message(msg.channel_id)
-                .content(&format!(
-                    "無効なモデル名です。選択可能: {}",
-                    ALLOWED_MODELS.join(", ")
-                ))
-                .await;
-        }
-        return;
-    }
-
-    // !s コマンド処理(セッション切り替え)
-if msg.content.starts_with("!s") {
-    let arg = msg.content.trim_start_matches("!s").trim();
-    let channel_key = msg.channel_id.to_string();
-
-    if arg.is_empty() {
-        let current = channel_sessions
-            .read()
-            .await
-            .get(&msg.channel_id.get())
-            .cloned()
-            .unwrap_or_else(|| "default".to_string());
-
-        let sessions = history.list_sessions(&channel_key).unwrap_or_default();
-        let list = if sessions.is_empty() {
-            "(まだ記録なし)".to_string()
-        } else {
-            sessions.join(", ")
-        };
-
-        let _ = http
-            .create_message(msg.channel_id)
-            .content(&format!("現在のセッション: {}\n既存セッション: {}", current, list))
-            .await;
-        return;
-    }
-    // handler.rs の !s コマンド処理に追加(argが "削除 セッション名" の形式の場合)
-    if let Some(target) = arg.strip_prefix("d ") {
-        let channel_key = msg.channel_id.to_string();
-        if let Err(e) = history.delete_session(&channel_key, target) {
-            eprintln!("セッション削除エラー: {:?}", e);
-        }
-        let _ = http
-            .create_message(msg.channel_id)
-            .content(&format!("セッション「{}」を削除しました", target))
-            .await;
-        return;
-    }
-
-    channel_sessions.write().await.insert(msg.channel_id.get(), arg.to_string());
-    let _ = http
-        .create_message(msg.channel_id)
-        .content(&format!("セッションを「{}」に切り替えました", arg))
-        .await;
-    return;
     }
 
     let is_mentioned = msg.mentions.iter().any(|m| m.id == bot_id);
