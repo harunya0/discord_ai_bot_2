@@ -137,14 +137,22 @@ async fn register_commands(token: &str) -> anyhow::Result<()> {
         },
         {
             "name": "session",
-            "description": "会話セッションを切り替え/確認します",
+            "description": "会話セッションを切り替え/確認/削除します",
             "type": 1,
-            "options": [{
-                "type": 3,
-                "name": "name",
-                "description": "セッション名(空欄で一覧表示)",
-                "required": false
-            }]
+            "options": [
+                {
+                    "type": 3,
+                    "name": "name",
+                    "description": "セッション名(空欄で一覧表示)",
+                    "required": false
+                },
+                {
+                    "type": 3,
+                    "name": "delete",
+                    "description": "削除したいセッション名",
+                    "required": false
+                }
+            ]
         }
     ]);
 

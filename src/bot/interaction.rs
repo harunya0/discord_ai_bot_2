@@ -31,17 +31,30 @@ pub async fn handle_interaction(
             let name = options.iter()
                 .find(|o| o["name"] == "name")
                 .and_then(|o| o["value"].as_str());
+            let delete_target = options.iter()
+                .find(|o| o["name"] == "delete")
+                .and_then(|o| o["value"].as_str());
 
-            match name {
-                Some(n) => {
-                    channel_sessions.write().await.insert(channel_id, n.to_string());
-                    format!("セッションを「{}」に切り替えました", n)
+            if let Some(target) = delete_target {
+                match history.delete_session(channel_id_str, target) {
+                    Ok(_) => format!("セッション「{}」を削除しました", target),
+                    Err(e) => {
+                        eprintln!("セッション削除エラー: {:?}", e);
+                        "削除に失敗しました".to_string()
+                    }
                 }
-                None => {
-                    let current = channel_sessions.read().await.get(&channel_id).cloned().unwrap_or_else(|| "default".to_string());
-                    let sessions = history.list_sessions(channel_id_str).unwrap_or_default();
-                    let list = if sessions.is_empty() { "(まだ記録なし)".to_string() } else { sessions.join(", ") };
-                    format!("現在のセッション: {}\n既存セッション: {}", current, list)
+            } else {
+                match name {
+                    Some(n) => {
+                        channel_sessions.write().await.insert(channel_id, n.to_string());
+                        format!("セッションを「{}」に切り替えました", n)
+                    }
+                    None => {
+                        let current = channel_sessions.read().await.get(&channel_id).cloned().unwrap_or_else(|| "default".to_string());
+                        let sessions = history.list_sessions(channel_id_str).unwrap_or_default();
+                        let list = if sessions.is_empty() { "(まだ記録なし)".to_string() } else { sessions.join(", ") };
+                        format!("現在のセッション: {}\n既存セッション: {}", current, list)
+                    }
                 }
             }
         }
