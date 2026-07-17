@@ -65,4 +65,37 @@ impl AiClient {
 
     Ok(text)
     }
+        pub async fn generate_with_search(&self, query: &str, model: &str) -> anyhow::Result<String> {
+        let scopes = &["https://www.googleapis.com/auth/cloud-platform"];
+        let token = self.service_account.token(scopes).await?;
+
+        let url = format!(
+            "https://aiplatform.googleapis.com/v1/projects/{}/locations/global/publishers/google/models/{}:generateContent",
+            self.project_id, model
+        );
+
+        let body = json!({
+            "contents": [{
+                "role": "user",
+                "parts": [{ "text": query }]
+            }],
+            "tools": [{ "google_search": {} }]
+        });
+
+        let res = self.http
+            .post(&url)
+            .bearer_auth(token.as_str())
+            .json(&body)
+            .send()
+            .await?;
+
+        let json_res: serde_json::Value = res.json().await?;
+
+        let text = json_res["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .unwrap_or("(検索結果の解析に失敗しました)")
+            .to_string();
+
+        Ok(text)
+    }
 }
