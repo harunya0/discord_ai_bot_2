@@ -82,6 +82,12 @@ pub async fn handle_interaction(
                 .and_then(|o| o["value"].as_bool())
                 .unwrap_or(false);
 
+            let count = options.iter()
+                .find(|o| o["name"] == "count")
+                .and_then(|o| o["value"].as_u64())
+                .map(|v| v as u8)
+                .unwrap_or(5);
+
             if use_ai {
                 match ai_client.generate_with_search(query, "gemini-3-flash-preview").await {
                     Ok(text) => text,
@@ -91,7 +97,7 @@ pub async fn handle_interaction(
                     }
                 }
             } else {
-                match search_client.search(query, 5).await {
+                match search_client.search(query, count).await {
                     Ok(results) if !results.is_empty() => {
                         results.iter()
                             .enumerate()

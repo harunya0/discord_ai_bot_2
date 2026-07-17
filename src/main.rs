@@ -178,6 +178,14 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
                     "name": "ai",
                     "description": "AIによる要約回答にする(デフォルトは生の検索結果一覧)",
                     "required": false
+                },
+                {
+                    "type": 4,
+                    "name": "count",
+                    "description": "表示件数(デフォルト5、最大20)",
+                    "required": false,
+                    "min_value": 1,
+                    "max_value": 20
                 }
             ]
         }
