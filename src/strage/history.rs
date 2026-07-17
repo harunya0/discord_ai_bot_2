@@ -74,20 +74,22 @@ impl HistoryStore {
         &self,
         channel_id: &str,
         window: i64,
-    ) -> anyhow::Result<Vec<(String, Vec<f32>)>> {
+    ) -> anyhow::Result<Vec<(String, Vec<f32>, i64)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT content, embedding FROM messages
-             WHERE channel_id = ?1 AND embedding IS NOT NULL
-             ORDER BY created_at DESC LIMIT ?2",
+            "SELECT content, embedding, created_at FROM messages
+            WHERE channel_id = ?1 AND embedding IS NOT NULL
+            ORDER BY created_at DESC LIMIT ?2",
         )?;
         let rows = stmt.query_map(rusqlite::params![channel_id, window], |row| {
             let content: String = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
-            Ok((content, bytes_to_f32(&blob)))
+            let created_at: i64 = row.get(2)?;
+            Ok((content, bytes_to_f32(&blob), created_at))
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
+    
     pub fn list_sessions(&self, channel_id: &str) -> anyhow::Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let pattern = format!("{}:%", channel_id);
