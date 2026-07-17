@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use base64::{engine::general_purpose, Engine as _};
 use serde_json::json;
+use crate::search::WebSearchClient;
 use crate::ai::client::AiClient;
 use crate::ai::embedding::EmbeddingClient;
 use crate::ai::openai::OpenAiClient;
@@ -29,7 +30,8 @@ pub async fn handle_message(
     channel_models: Arc<RwLock<HashMap<u64, String>>>,
     bot_id: Id<UserMarker>,
     openai_client: Arc<OpenAiClient>,
-    channel_sessions: Arc<RwLock<HashMap<u64, String>>>
+    channel_sessions: Arc<RwLock<HashMap<u64, String>>>,
+    search_client: Arc<WebSearchClient>,
 ) {
     if msg.author.bot {
         return;
