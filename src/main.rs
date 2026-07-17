@@ -2,6 +2,7 @@ mod bot;
 mod ai;
 mod strage;
 mod rag;
+mod search;
 
 use twilight_gateway::{Intents, Shard, ShardId, StreamExt, EventTypeFlags, Event};
 use twilight_http::Client as HttpClient;
@@ -17,6 +18,7 @@ use ai::embedding::EmbeddingClient;
 use strage::history::HistoryStore;
 use gcp_auth::CustomServiceAccount;
 use std::path::Path;
+use search::WebSearchClient;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> anyhow::Result<()> {
@@ -31,6 +33,8 @@ async fn main() -> anyhow::Result<()> {
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap_or_default();
     let openai_client = Arc::new(OpenAiClient::new(openai_api_key));
     let channel_sessions: Arc<RwLock<HashMap<u64, String>>> = Arc::new(RwLock::new(HashMap::new()));
+    let brave_api_key = env::var("BRAVE_API_KEY").unwrap_or_default();
+    let search_client = Arc::new(WebSearchClient::new(brave_api_key));
     
 
     let ai_client = Arc::new(
@@ -81,10 +85,11 @@ async fn main() -> anyhow::Result<()> {
                 let channel_models = Arc::clone(&channel_models);
                 let openai_client = Arc::clone(&openai_client);
                 let channel_sessions = Arc::clone(&channel_sessions);
+                let search_client = Arc::clone(&search_client);
                 tokio::spawn(async move {
                     let id = *bot_id.read().await;
                     if let Some(id) = id {
-                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client, channel_sessions).await;
+                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client, channel_sessions, search_client).await;
                     }
                 });
             }
@@ -94,8 +99,9 @@ async fn main() -> anyhow::Result<()> {
                 let channel_sessions = Arc::clone(&channel_sessions);
                 let history_store = Arc::clone(&history_store);
                 let ai_client = Arc::clone(&ai_client);
+                let search_client = Arc::clone(&search_client);
                 tokio::spawn(async move {
-                    bot::interaction::handle_interaction(value, channel_models, channel_sessions, history_store, ai_client).await;
+                    bot::interaction::handle_interaction(value, channel_models, channel_sessions, history_store, ai_client, search_client).await;
                 });
             }
             _ => {}
@@ -160,12 +166,20 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
             "name": "search",
             "description": "Web検索して回答します",
             "type": 1,
-            "options": [{
-                "type": 3,
-                "name": "query",
-                "description": "検索したい内容",
-                "required": true
-            }]
+            "options": [
+                {
+                    "type": 3,
+                    "name": "query",
+                    "description": "検索したい内容",
+                    "required": true
+                },
+                {
+                    "type": 5,
+                    "name": "ai",
+                    "description": "AIによる要約回答にする(デフォルトは生の検索結果一覧)",
+                    "required": false
+                }
+            ]
         }
     ]);
 

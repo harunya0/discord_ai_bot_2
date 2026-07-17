@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use crate::strage::history::HistoryStore;
 use crate::ai::client::AiClient;
+use crate::search::WebSearchClient;
 
 pub async fn handle_interaction(
     interaction: Value,
@@ -11,6 +12,7 @@ pub async fn handle_interaction(
     channel_sessions: Arc<RwLock<HashMap<u64, String>>>,
     history: Arc<HistoryStore>,
     ai_client: Arc<AiClient>,
+    search_client: Arc<WebSearchClient>,
 ) {
     let interaction_id = interaction["id"].as_str().unwrap_or_default();
     let token = interaction["token"].as_str().unwrap_or_default();
@@ -75,11 +77,33 @@ pub async fn handle_interaction(
                 .and_then(|o| o["value"].as_str())
                 .unwrap_or_default();
 
-            match ai_client.generate_with_search(query, "gemini-3-flash-preview").await {
-                Ok(text) => text,
-                Err(e) => {
-                    eprintln!("検索エラー: {:?}", e);
-                    "検索に失敗しました".to_string()
+            let use_ai = options.iter()
+                .find(|o| o["name"] == "ai")
+                .and_then(|o| o["value"].as_bool())
+                .unwrap_or(false);
+
+            if use_ai {
+                match ai_client.generate_with_search(query, "gemini-3-flash-preview").await {
+                    Ok(text) => text,
+                    Err(e) => {
+                        eprintln!("AI検索エラー: {:?}", e);
+                        "検索に失敗しました".to_string()
+                    }
+                }
+            } else {
+                match search_client.search(query, 5).await {
+                    Ok(results) if !results.is_empty() => {
+                        results.iter()
+                            .enumerate()
+                            .map(|(i, r)| format!("{}. **{}**\n{}\n{}", i + 1, r.title, r.url, r.description))
+                            .collect::<Vec<_>>()
+                            .join("\n\n")
+                    }
+                    Ok(_) => "検索結果が見つかりませんでした".to_string(),
+                    Err(e) => {
+                        eprintln!("検索エラー: {:?}", e);
+                        "検索に失敗しました".to_string()
+                    }
                 }
             }
         }
