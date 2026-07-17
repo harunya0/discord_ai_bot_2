@@ -22,7 +22,8 @@ use std::path::Path;
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKENが見つかりません");
-    register_commands(&token).await?;
+    let guild_id = env::var("DISCORD_GUILD_ID").ok();
+    register_commands(&token, guild_id.as_deref()).await?;
     let credentials_path = env::var("GCP_CREDENTIALS_PATH").expect("GCP_CREDENTIALS_PATHが見つかりません");
     let project_id = env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_IDが見つかりません");
     let location = env::var("GCP_LOCATION").unwrap_or_else(|_| "global".to_string());
@@ -104,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn register_commands(token: &str) -> anyhow::Result<()> {
+async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
 
     let app: serde_json::Value = client
@@ -168,14 +169,30 @@ async fn register_commands(token: &str) -> anyhow::Result<()> {
         }
     ]);
 
-    let url = format!("https://discord.com/api/v10/applications/{}/commands", app_id);
-    let res = client
-        .put(&url)
+    // 1. グローバル登録(常に実行)
+    let global_url = format!("https://discord.com/api/v10/applications/{}/commands", app_id);
+    let global_res = client
+        .put(&global_url)
         .header("Authorization", format!("Bot {}", token))
         .json(&commands)
         .send()
         .await?;
+    println!("グローバルコマンド登録結果: {}", global_res.status());
 
-    println!("コマンド登録結果: {}", res.status());
+    // 2. GUILD_IDが指定されていれば、追加でギルド登録(即時反映用)
+    if let Some(gid) = guild_id {
+        let guild_url = format!(
+            "https://discord.com/api/v10/applications/{}/guilds/{}/commands",
+            app_id, gid
+        );
+        let guild_res = client
+            .put(&guild_url)
+            .header("Authorization", format!("Bot {}", token))
+            .json(&commands)
+            .send()
+            .await?;
+        println!("ギルドコマンド登録結果: {}", guild_res.status());
+    }
+
     Ok(())
 }
