@@ -92,8 +92,9 @@ async fn main() -> anyhow::Result<()> {
                 let channel_models = Arc::clone(&channel_models);
                 let channel_sessions = Arc::clone(&channel_sessions);
                 let history_store = Arc::clone(&history_store);
+                let ai_client = Arc::clone(&ai_client);
                 tokio::spawn(async move {
-                    bot::interaction::handle_interaction(value, channel_models, channel_sessions, history_store).await;
+                    bot::interaction::handle_interaction(value, channel_models, channel_sessions, history_store, ai_client).await;
                 });
             }
             _ => {}
@@ -153,6 +154,17 @@ async fn register_commands(token: &str) -> anyhow::Result<()> {
                     "required": false
                 }
             ]
+        },
+        {
+            "name": "search",
+            "description": "Web検索して回答します",
+            "type": 1,
+            "options": [{
+                "type": 3,
+                "name": "query",
+                "description": "検索したい内容",
+                "required": true
+            }]
         }
     ]);
 
