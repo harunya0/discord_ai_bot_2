@@ -170,7 +170,7 @@ pub async fn handle_message(
             .await
             .unwrap_or_default();
         let candidates = history.get_candidates_for_search(&channel_id, 300).unwrap_or_default();
-        let relevant = rag::rag::search_similar(&candidates, &query_embedding, 3);
+        let relevant = rag::rag::search_similar_with_decay(&candidates, &query_embedding, 3, 14.0);
 
         // 4. 直近の会話履歴
         let recent = history.get_recent_history(&channel_id, 10).unwrap_or_default();
