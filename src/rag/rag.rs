@@ -6,10 +6,11 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 pub fn search_similar_with_decay<'a>(
-    candidates: &'a [(String, Vec<f32>, i64)],  // (text, embedding, created_at)
+    candidates: &'a [(String, Vec<f32>, i64)],
     query_embedding: &[f32],
     top_k: usize,
     half_life_days: f32,
+    min_score: f32,
 ) -> Vec<&'a str> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -24,6 +25,7 @@ pub fn search_similar_with_decay<'a>(
             let decay = 0.5_f32.powf(age_days / half_life_days);
             (text.as_str(), similarity * decay)
         })
+        .filter(|(_, score)| *score >= min_score)
         .collect();
 
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
