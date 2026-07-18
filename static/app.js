@@ -402,11 +402,15 @@ async function loadHistory() {
 
 async function switchChannel() {
   const channel_id = document.getElementById('channelInput').value.trim() || "0";
-  await api('/channel', { method: 'POST', body: JSON.stringify({ channel_id }) });
-  logSystem('同期チャンネルを「' + (channel_id === "0" ? "Web単独 (0)" : channel_id) + '」に切り替えました');
-  currentLoadedChannel = null;
-  currentLoadedSession = null;
-  await refreshStatus();
+  try {
+    await api('/channel', { method: 'POST', body: JSON.stringify({ channel_id }) });
+    logSystem('同期チャンネルを「' + (channel_id === "0" ? "Web単独 (0)" : channel_id) + '」に切り替えました');
+    currentLoadedChannel = null;
+    currentLoadedSession = null;
+    await refreshStatus();
+  } catch (e) {
+    logSystem('チャンネル切り替え失敗: サーバー側の更新や再起動が完了しているか確認してください (' + e.message + ')');
+  }
 }
 
 document.getElementById('tokenInput').value = getToken();
