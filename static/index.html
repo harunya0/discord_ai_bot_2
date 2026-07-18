@@ -77,7 +77,7 @@
       <input type="file" id="fileInput" multiple style="display: none" onchange="handleFileSelect(event)">
       <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="ファイルを添付">📎</button>
 
-      <textarea id="messageInput" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"></textarea>
+      <textarea id="messageInput" placeholder="メッセージを入力..."></textarea>
       <button class="primary" onclick="sendMessage()">送信</button>
     </div>
   </div>
