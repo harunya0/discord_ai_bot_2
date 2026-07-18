@@ -3,6 +3,7 @@ mod ai;
 mod strage;
 mod rag;
 mod search;
+mod web;
 
 use twilight_gateway::{Intents, Shard, ShardId, StreamExt, EventTypeFlags, Event};
 use twilight_http::Client as HttpClient;
@@ -19,6 +20,8 @@ use strage::history::HistoryStore;
 use gcp_auth::CustomServiceAccount;
 use std::path::Path;
 use search::WebSearchClient;
+use web::{AppState, build_router};
+use std::time::Instant;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> anyhow::Result<()> {
@@ -57,6 +60,18 @@ async fn main() -> anyhow::Result<()> {
         | EventTypeFlags::MESSAGE_CREATE
         | EventTypeFlags::GUILD_CREATE
         | EventTypeFlags::INTERACTION_CREATE;
+
+    let web_state = AppState {
+        ai_client: Arc::clone(&ai_client),
+        openai_client: Arc::clone(&openai_client),
+        embedding_client: Arc::clone(&embedding_client),
+        history: Arc::clone(&history_store),
+        channel_models: Arc::clone(&channel_models),
+        channel_sessions: Arc::clone(&channel_sessions),
+        api_token: env::var("WEB_API_TOKEN").expect("WEB_API_TOKENが見つかりません"),
+        start_time: Instant::now(),
+    };
+    let app = build_router(web_state);
 
     while let Some(item) = shard.next_event(event_types).await {
         let event = match item {
