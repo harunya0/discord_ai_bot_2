@@ -19,6 +19,7 @@ use crate::ai::openai::OpenAiClient;
 use crate::ai::embedding::EmbeddingClient;
 use crate::strage::history::HistoryStore;
 use crate::rag;
+use crate::search::WebSearchClient;
 
 // Discordの実チャンネルIDは巨大なsnowflakeなので、0は絶対に衝突しない予約ID
 pub const WEB_CHANNEL_ID: u64 = 0;
@@ -31,6 +32,7 @@ pub struct AppState {
     pub history: Arc<HistoryStore>,
     pub channel_models: Arc<RwLock<HashMap<u64, String>>>,
     pub channel_sessions: Arc<RwLock<HashMap<u64, String>>>,
+    pub search_client: Arc<WebSearchClient>,
     pub api_token: String,
     pub start_time: Instant,
 }
@@ -61,6 +63,27 @@ struct StatusResponse {
     current_session: String,
     session_count: usize,
     uptime_seconds: u64,
+}
+
+#[derive(Deserialize)]
+struct SearchRequest {
+    query: String,
+    count: Option<u8>,
+}
+
+#[derive(Serialize)]
+struct SearchResultItem {
+    title: String,
+    url: String,
+    description: String,
+}
+
+async fn search_handler(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<Vec<SearchResultItem>> {
+    let count = req.count.unwrap_or(5);
+    let results = state.search_client.search(&req.query, count).await.unwrap_or_default();
+    Json(results.into_iter().map(|r| SearchResultItem {
+        title: r.title, url: r.url, description: r.description
+    }).collect())
 }
 
 async fn auth_middleware(
@@ -168,7 +191,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sessions/:name", delete(delete_session_handler))
         .route("/model", post(switch_model_handler))
         .route("/status", get(status_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+        .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+        .route("/search", post(search_handler));
 
     Router::new()
         .route("/", get(index_handler))
