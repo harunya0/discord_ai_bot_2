@@ -66,10 +66,6 @@ async function sendMessage() {
 
 async function refreshStatus() {
   try {
-    document.getElementById('sbChannel').textContent = status.current_channel_id === "0" ? "0 (Web単独)" : status.current_channel_id;
-    if (document.getElementById('channelInput').value === "") {
-      document.getElementById('channelInput').value = status.current_channel_id === "0" ? "" : status.current_channel_id;
-    }
     const status = await api('/status');
     document.getElementById('sbModel').textContent = status.current_model;
     document.getElementById('sbSession').textContent = status.current_session;
@@ -100,6 +96,10 @@ async function refreshStatus() {
       };
       list.appendChild(li);
     });
+    document.getElementById('sbChannel').textContent = status.current_channel_id === "0" ? "0 (Web単独)" : status.current_channel_id;
+    if (document.getElementById('channelInput').value === "") {
+      document.getElementById('channelInput').value = status.current_channel_id === "0" ? "" : status.current_channel_id;
+    }
   } catch (e) {
     logSystem('ステータス取得失敗。トークンを確認してください。');
     console.error('詳細エラー:', e);
