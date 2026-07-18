@@ -71,8 +71,12 @@ async function refreshStatus() {
     document.getElementById('sbSession').textContent = status.current_session;
     document.getElementById('sbUptime').textContent = formatUptime(status.uptime_seconds);
     document.getElementById('modelSelect').value = status.current_model;
-    
-    if (currentLoadedSession !== status.current_session) {
+    document.getElementById('sbChannel').textContent = status.current_channel_id === "0" ? "0 (Web単独)" : status.current_channel_id;
+    if (document.getElementById('channelInput').value === "") {
+      document.getElementById('channelInput').value = status.current_channel_id === "0" ? "" : status.current_channel_id;
+    }
+    if (currentLoadedChannel !== status.current_channel_id || currentLoadedSession !== status.current_session) {
+      currentLoadedChannel = status.current_channel_id;
       currentLoadedSession = status.current_session;
       await loadHistory();
     }
@@ -358,6 +362,7 @@ if (dropZone) {
 }
 
 let currentLoadedSession = null;
+let currentLoadedChannel = null;
 
 async function loadHistory() {
   const log = document.getElementById('log');
@@ -380,8 +385,9 @@ async function switchChannel() {
   const channel_id = document.getElementById('channelInput').value.trim() || "0";
   await api('/channel', { method: 'POST', body: JSON.stringify({ channel_id }) });
   logSystem('同期チャンネルを「' + (channel_id === "0" ? "Web単独 (0)" : channel_id) + '」に切り替えました');
-  currentLoadedSession = null; 
-  refreshStatus();
+  currentLoadedChannel = null;
+  currentLoadedSession = null;
+  await refreshStatus();
 }
 
 document.getElementById('tokenInput').value = getToken();
