@@ -41,13 +41,9 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text && selectedFiles.length === 0) return;
 
-  let displayMsg = text;
-  if (selectedFiles.length > 0) {
-    const names = selectedFiles.map(f => `[📎 ${f.name}]`).join(' ');
-    displayMsg = displayMsg ? `${displayMsg}\n${names}` : names;
-  }
-
-  appendMsg('user', displayMsg);
+  // チャットログにテキストとファイルのカードを描画
+  const filesToDisplay = [...selectedFiles];
+  appendMsg('user', text, filesToDisplay);
   input.value = '';
 
   const filePayloads = await Promise.all(selectedFiles.map(fileToBase64));
@@ -272,6 +268,83 @@ async function renderFilePreview() {
   }
 }
 
+async function appendMsg(role, text, files = []) {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const label = role === 'user' ? 'you' : 'albot';
+  div.innerHTML = '<div class="role">' + label + '</div><div class="content"></div>';
+  div.querySelector('.content').textContent = text;
+  
+  // ファイルがある場合はチャットログ内にカードを描画
+  if (files.length > 0) {
+    const attachDiv = document.createElement('div');
+    attachDiv.className = 'chat-attachments';
+    
+    for (const file of files) {
+      const card = document.createElement('div');
+      card.className = 'file-card chat-file-card';
+      const ext = file.name.split('.').pop().toLowerCase();
+      const isImage = file.type.startsWith('image/');
+      const isText = TEXT_EXTENSIONS.includes(ext) || file.type.startsWith('text/');
+      
+      if (isImage) {
+        const url = URL.createObjectURL(file);
+        card.classList.add('image-card');
+        card.innerHTML = `<img src="${url}" alt="${escapeHtml(file.name)}">`;
+      } else if (isText) {
+        card.classList.add('text-card');
+        try {
+          const content = await file.text();
+          const lines = content.split(/\r?\n/).slice(0, 5).join('\n');
+          card.innerHTML = `
+            <div class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+            <div class="text-preview">${escapeHtml(lines)}</div>
+          `;
+        } catch (e) {
+          card.innerHTML = `<div class="file-name">${escapeHtml(file.name)}</div><div class="text-preview">(読み込み失敗)</div>`;
+        }
+      } else {
+        card.classList.add('text-card');
+        card.innerHTML = `<div class="file-name">${escapeHtml(file.name)}</div><div class="text-preview">📎 ファイル</div>`;
+      }
+      attachDiv.appendChild(card);
+    }
+    div.appendChild(attachDiv);
+  }
+
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+// --- ドラッグ＆ドロップでファイルを添付 ---
+const dropZone = document.getElementById('main');
+
+if (dropZone) {
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    }, false);
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const files = Array.from(dt.files);
+    if (files.length > 0) {
+      selectedFiles = selectedFiles.concat(files);
+      renderFilePreview();
+    }
+  }, false);
+}
 document.getElementById('tokenInput').value = getToken();
 refreshStatus();
 setInterval(refreshStatus, 30000);
