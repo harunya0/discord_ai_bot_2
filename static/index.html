@@ -19,12 +19,22 @@
 <div id="overlay" class="overlay" onclick="toggleSidebar()"></div>
 
 <div id="statusbar">
-  <button id="menuToggle" class="menu-toggle" onclick="toggleSidebar()">☰ MENU</button>
-  <div class="item"><span class="pulse"></span><span>online</span></div>
-  <div class="item">model <span class="val" id="sbModel">-</span></div>
-  <div class="item">channel <span class="val" id="sbChannel">0</span></div>
-  <div class="item">session <span class="val" id="sbSession">-</span></div>
-  <div class="item">uptime <span class="val" id="sbUptime">-</span></div>
+  <div class="statusbar-main">
+    <button id="menuToggle" class="menu-toggle" onclick="toggleSidebar()">☰</button>
+    <div class="statusbar-title mono">Albot</div>
+    <div class="item online-item"><span class="pulse"></span><span class="online-label">online</span></div>
+    <div class="item">model <span class="val" id="sbModel">-</span></div>
+    <div class="item">channel <span class="val" id="sbChannel">0</span></div>
+    <div class="item">session <span class="val" id="sbSession">-</span></div>
+    <div class="item">uptime <span class="val" id="sbUptime">-</span></div>
+    <button id="detailsToggle" class="details-toggle" onclick="toggleStatusDetails()">詳細 ▾</button>
+  </div>
+  <div id="statusbarDetails" class="statusbar-details">
+    <div class="item">model <span class="val" id="sbModelM">-</span></div>
+    <div class="item">channel <span class="val" id="sbChannelM">0</span></div>
+    <div class="item">session <span class="val" id="sbSessionM">-</span></div>
+    <div class="item">uptime <span class="val" id="sbUptimeM">-</span></div>
+  </div>
 </div>
 
 <div id="body">

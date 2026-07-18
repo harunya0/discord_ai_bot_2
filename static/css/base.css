@@ -14,12 +14,15 @@
 
 * { box-sizing: border-box; }
 
+html { height: 100%; }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: 'Inter', sans-serif;
   height: 100vh;
+  height: 100dvh; /* モバイルブラウザのアドレスバー分の誤差を吸収 */
   display: flex;
   flex-direction: column;
   overflow: hidden;

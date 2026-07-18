@@ -1,8 +1,4 @@
 #statusbar {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 10px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   font-family: 'IBM Plex Mono', monospace;
@@ -10,8 +6,17 @@
   color: var(--text-muted);
   flex-shrink: 0;
 }
+.statusbar-main {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 20px;
+}
 #statusbar .item { display: flex; align-items: center; gap: 6px; }
 #statusbar .val { color: var(--text); }
+.statusbar-title { display: none; color: var(--text); font-weight: 500; font-size: 13px; }
+.details-toggle { display: none; }
+.statusbar-details { display: none; }
 
 .pulse {
   width: 8px; height: 8px; border-radius: 50%;
