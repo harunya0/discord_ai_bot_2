@@ -41,6 +41,7 @@ async function sendMessage() {
   const filesToDisplay = [...selectedFiles];
   await appendMsg('user', text, filesToDisplay);
   input.value = '';
+  input.style.height = 'auto';
 
   const filePayloads = await Promise.all(selectedFiles.map(fileToBase64));
   selectedFiles = [];

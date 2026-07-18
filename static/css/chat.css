@@ -63,3 +63,9 @@
 }
 #inputArea input, #inputArea textarea { margin-bottom: 0; }
 #inputArea button { flex-shrink: 0; }
+#messageInput {
+  max-height: 200px;
+  overflow-y: auto;
+  resize: none;
+  line-height: 1.4;
+}

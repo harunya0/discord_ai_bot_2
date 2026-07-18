@@ -8,6 +8,12 @@ async function refreshStatus() {
 
     const channelLabel = status.current_channel_id === "0" ? "0 (Web単独)" : status.current_channel_id;
     document.getElementById('sbChannel').textContent = channelLabel;
+
+    // モバイル用の折りたたみ詳細行にも同じ値を反映
+    document.getElementById('sbModelM').textContent = status.current_model;
+    document.getElementById('sbSessionM').textContent = status.current_session;
+    document.getElementById('sbUptimeM').textContent = formatUptime(status.uptime_seconds);
+    document.getElementById('sbChannelM').textContent = channelLabel;
     if (document.getElementById('channelInput').value === "") {
       document.getElementById('channelInput').value = status.current_channel_id === "0" ? "" : status.current_channel_id;
     }

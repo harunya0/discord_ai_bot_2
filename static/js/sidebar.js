@@ -1,3 +1,12 @@
+// モバイル：ステータスバーの詳細行（model/channel/session/uptime）の開閉
+function toggleStatusDetails() {
+  const details = document.getElementById('statusbarDetails');
+  const toggle = document.getElementById('detailsToggle');
+  if (!details || !toggle) return;
+  const open = details.classList.toggle('open');
+  toggle.textContent = open ? '詳細 ▴' : '詳細 ▾';
+}
+
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('overlay');
