@@ -6,7 +6,13 @@
 <title>Albot Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css">
+
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/statusbar.css">
+<link rel="stylesheet" href="/css/sidebar.css">
+<link rel="stylesheet" href="/css/chat.css">
+<link rel="stylesheet" href="/css/files.css">
+<link rel="stylesheet" href="/css/responsive.css">
 </head>
 <body>
 
@@ -83,6 +89,19 @@
   </div>
 </div>
 
-<script src="/app.js"></script>
+<!-- 外部ライブラリ（Markdown描画とサニタイズ） -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+
+<!-- アプリ本体。依存関係の順に読み込む -->
+<script src="/js/utils.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/state.js"></script>
+<script src="/js/files.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/status.js"></script>
+<script src="/js/search.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/main.js"></script>
 </body>
 </html>
