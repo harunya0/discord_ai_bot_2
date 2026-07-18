@@ -102,6 +102,8 @@ async function refreshStatus() {
     });
   } catch (e) {
     logSystem('ステータス取得失敗。トークンを確認してください。');
+    console.error('詳細エラー:', e);
+    logSystem('ステータス取得失敗: ' + (e.message || e));
   }
 }
 
