@@ -222,6 +222,56 @@ document.addEventListener('paste', (event) => {
   }
 });
 
+// テキスト拡張子のリスト（ボット側と統一）
+const TEXT_EXTENSIONS = [
+  'txt', 'md', 'rs', 'py', 'js', 'ts', 'json', 'toml', 'yaml', 'yml',
+  'csv', 'html', 'css', 'c', 'cpp'
+];
+
+// プレビュー表示関数をアップグレード
+async function renderFilePreview() {
+  const container = document.getElementById('filePreview');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (let i = 0; i < selectedFiles.length; i++) {
+    const file = selectedFiles[i];
+    const ext = file.name.split('.').pop().toLowerCase();
+    const isImage = file.type.startsWith('image/');
+    const isText = TEXT_EXTENSIONS.includes(ext) || file.type.startsWith('text/');
+
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    card.innerHTML = `<div class="remove" onclick="removeFile(${i})">×</div>`;
+
+    if (isImage) {
+      // 画像ならサムネイルを生成して正方形に収める
+      const url = URL.createObjectURL(file);
+      card.classList.add('image-card');
+      card.innerHTML += `<img src="${url}" alt="${escapeHtml(file.name)}">`;
+    } else if (isText) {
+      // テキストなら最初の5行を取得して表示
+      card.classList.add('text-card');
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).slice(0, 5).join('\n');
+        card.innerHTML += `
+          <div class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+          <div class="text-preview">${escapeHtml(lines)}</div>
+        `;
+      } catch (e) {
+        card.innerHTML += `<div class="file-name">${escapeHtml(file.name)}</div><div class="text-preview">(読み込み失敗)</div>`;
+      }
+    } else {
+      // その他ファイル
+      card.classList.add('text-card');
+      card.innerHTML += `<div class="file-name">${escapeHtml(file.name)}</div><div class="text-preview">📎 ファイル</div>`;
+    }
+
+    container.appendChild(card);
+  }
+}
+
 document.getElementById('tokenInput').value = getToken();
 refreshStatus();
 setInterval(refreshStatus, 30000);
