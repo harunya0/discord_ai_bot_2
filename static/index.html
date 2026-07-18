@@ -62,7 +62,11 @@
 
   <div id="main">
     <div id="log"></div>
+    <div id="filePreview" class="file-preview"></div>
     <div id="inputArea">
+      <input type="file" id="fileInput" multiple style="display: none" onchange="handleFileSelect(event)">
+      <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="ファイルを添付">📎</button>
+
       <input type="text" id="messageInput" placeholder="メッセージを入力..." onkeydown="if(event.key==='Enter') sendMessage()">
       <button class="primary" onclick="sendMessage()">送信</button>
     </div>

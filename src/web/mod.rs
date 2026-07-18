@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tower_http::services::ServeDir;
+use base64::{engine::general_purpose, Engine as _};
 
 use crate::ai::client::AiClient;
 use crate::ai::openai::OpenAiClient;
@@ -21,8 +22,13 @@ use crate::strage::history::HistoryStore;
 use crate::rag;
 use crate::search::WebSearchClient;
 
-// Discordの実チャンネルIDは巨大なsnowflakeなので、0は絶対に衝突しない予約ID
 pub const WEB_CHANNEL_ID: u64 = 0;
+
+const TEXT_EXTENSIONS: [&str; 15] = [
+    "txt", "md", "rs", "py", "js", "ts", "json", "toml", "yaml", "yml",
+    "csv", "html", "css", "c", "cpp",
+];
+const MAX_FILE_CHARS: usize = 8000;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -38,8 +44,16 @@ pub struct AppState {
 }
 
 #[derive(Deserialize)]
+struct WebFile {
+    name: String,
+    mime: String,
+    data: String,
+}
+
+#[derive(Deserialize)]
 struct ChatRequest {
     message: String,
+    files: Option<Vec<WebFile>>,
 }
 
 #[derive(Serialize)]
@@ -107,18 +121,54 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
     let model = state.channel_models.read().await
         .get(&WEB_CHANNEL_ID).cloned().unwrap_or_else(|| "gemini-3.1-flash-lite".to_string());
 
-    // Embedding生成・履歴保存(ユーザー発言)
-    let user_embedding = state.embedding_client.embed(&req.message, "RETRIEVAL_DOCUMENT").await.unwrap_or_default();
-    let _ = state.history.save_message(&channel_id, "web_user", "user", &req.message, &user_embedding);
+    // 1. 添付ファイルの処理 (画像とテキストの分離)
+    let mut image_parts: Vec<serde_json::Value> = Vec::new();
+    let mut file_texts: Vec<String> = Vec::new();
 
-    // RAG検索
-    let query_embedding = state.embedding_client.embed(&req.message, "RETRIEVAL_QUERY").await.unwrap_or_default();
+    if let Some(files) = &req.files {
+        for file in files {
+            let ext = file.name.rsplit('.').next().unwrap_or("").to_lowercase();
+            
+            if file.mime.starts_with("image/") {
+                image_parts.push(serde_json::json!({
+                    "inlineData": {
+                        "mimeType": file.mime,
+                        "data": file.data
+                    }
+                }));
+            } else if TEXT_EXTENSIONS.contains(&ext.as_str()) || file.mime.starts_with("text/") {
+                if let Ok(bytes) = general_purpose::STANDARD.decode(&file.data) {
+                    if let Ok(text) = String::from_utf8(bytes) {
+                        let truncated: String = text.chars().take(MAX_FILE_CHARS).collect();
+                        let note = if text.chars().count() > MAX_FILE_CHARS { "\n...(以降省略)" } else { "" };
+                        file_texts.push(format!(
+                            "添付ファイル「{}」の内容:\n```\n{}{}\n```",
+                            file.name, truncated, note
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 履歴保存用テキスト・Embedding生成(テキストのみ対象)
+    let embed_text = if req.message.trim().is_empty() && !image_parts.is_empty() {
+        "[画像添付]".to_string()
+    } else {
+        req.message.clone()
+    };
+    let user_embedding = state.embedding_client.embed(&embed_text, "RETRIEVAL_DOCUMENT").await.unwrap_or_default();
+    let _ = state.history.save_message(&channel_id, "web_user", "user", &embed_text, &user_embedding);
+
+    // 3. RAG検索
+    let query_embedding = state.embedding_client.embed(&embed_text, "RETRIEVAL_QUERY").await.unwrap_or_default();
     let candidates = state.history.get_candidates_for_search(&channel_id, 300).unwrap_or_default();
     let relevant = rag::rag::search_similar_with_decay(&candidates, &query_embedding, 3, 14.0, 0.3);
 
-    // 直近履歴
+    // 4. 直近履歴
     let recent = state.history.get_recent_history(&channel_id, 10).unwrap_or_default();
 
+    // 5. AI用コンテンツ配列の組み立て
     let mut contents: Vec<serde_json::Value> = Vec::new();
     if !relevant.is_empty() {
         let context_text = format!("(過去の関連する会話)\n{}", relevant.join("\n"));
@@ -127,8 +177,24 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
     for (role, text) in &recent {
         contents.push(serde_json::json!({ "role": role, "parts": [{ "text": text }] }));
     }
-    contents.push(serde_json::json!({ "role": "user", "parts": [{ "text": req.message }] }));
 
+    // 今回のメッセージ(テキスト + ファイル内容 + 画像)をまとめる
+    let mut combined_text = req.message.clone();
+    if !file_texts.is_empty() {
+        if !combined_text.trim().is_empty() {
+            combined_text.push_str("\n\n");
+        }
+        combined_text.push_str(&file_texts.join("\n\n"));
+    }
+
+    let mut current_parts: Vec<serde_json::Value> = Vec::new();
+    if !combined_text.trim().is_empty() {
+        current_parts.push(serde_json::json!({ "text": combined_text }));
+    }
+    current_parts.extend(image_parts);
+    contents.push(serde_json::json!({ "role": "user", "parts": current_parts }));
+
+    // 6. AI生成
     let reply = if model.starts_with("gpt-") {
         let messages = crate::ai::convert::to_openai_messages(&contents);
         state.openai_client.generate(messages, &model).await
@@ -192,14 +258,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/model", post(switch_model_handler))
         .route("/status", get(status_handler))
         .route("/search", post(search_handler))
-        // API全体にトークン認証ミドルウェアを適用
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     Router::new()
         .route("/", get(index_handler))
         .nest("/api", api_routes)
-        // ルート("/")や "/api" に該当しないリクエスト(app.jsやstyle.css等)は
-        // staticフォルダから探して返す
         .fallback_service(ServeDir::new("static"))
         .with_state(state)
 }
