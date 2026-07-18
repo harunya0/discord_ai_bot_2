@@ -92,6 +92,36 @@ struct SearchResultItem {
     description: String,
 }
 
+#[derive(Serialize)]
+struct HistoryItem {
+    role: String,
+    text: String,
+}
+
+async fn get_history_handler(State(state): State<AppState>) -> Json<Vec<HistoryItem>> {
+    let session = state.channel_sessions.read().await
+        .get(&WEB_CHANNEL_ID).cloned().unwrap_or_else(|| "default".to_string());
+    let channel_id = format!("web:{}", session);
+
+    // 過去50件の履歴を取得（必要に応じて件数は変更可能） [source: 5]
+    let recent = state.history.get_recent_history(&channel_id, 50).unwrap_or_default();
+
+    // フロント表示用に役職(role)を正規化して返す
+    let items = recent.into_iter().map(|(role, text)| {
+        let display_role = if role == "model" || role == "bot" {
+            "bot".to_string()
+        } else {
+            "user".to_string()
+        };
+        HistoryItem {
+            role: display_role,
+            text,
+        }
+    }).collect();
+
+    Json(items)
+}
+
 async fn search_handler(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<Vec<SearchResultItem>> {
     let count = req.count.unwrap_or(5);
     let results = state.search_client.search(&req.query, count).await.unwrap_or_default();
@@ -258,6 +288,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/model", post(switch_model_handler))
         .route("/status", get(status_handler))
         .route("/search", post(search_handler))
+        .route("/history", get(get_history_handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     Router::new()
