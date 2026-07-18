@@ -93,7 +93,7 @@ data/              … 実行時に会話履歴DB(history.db)が作られる
 
 ## 本番環境へのデプロイ
 
-さくらのクラウド・AWSなど、Rocky Linux系のVPSへのデプロイ手順（Caddyによる自動HTTPS化、fail2banでの防御、DuckDNSでのIP更新を含む）をAnsibleでコード化したものを`ansible-iac/`以下に同梱しています。使い方は[`ansible-iac/README.md`](./ansible-iac/README.md)を参照してください。
+さくらのクラウド・AWSなど、Rocky Linux系のVPSへのデプロイ手順（Caddyによる自動HTTPS化、fail2banでの防御、DuckDNSでのIP更新を含む）をAnsibleでコード化したものを`ansible-iac/`以下に同梱しています。使い方は[`ansible-iac`](https://github.com/harunya0/ansible-iac)を参照してください。
 
 ## ライセンス
 
