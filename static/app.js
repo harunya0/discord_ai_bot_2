@@ -64,6 +64,25 @@ async function sendMessage() {
   }
 }
 
+async function loadHistory() {
+  const log = document.getElementById('log');
+  log.innerHTML = ''; // 画面を一度クリア
+
+  try {
+    const history = await api('/history');
+    if (!history || history.length === 0) {
+      logSystem('このチャンネル・セッションの過去の会話記録はありません');
+      return;
+    }
+    history.forEach(item => {
+      appendMsg(item.role, item.text);
+    });
+    logSystem('過去の会話履歴を同期しました');
+  } catch (e) {
+    logSystem('履歴の読み込み失敗: ' + (e.message || e));
+  }
+}
+
 async function refreshStatus() {
   try {
     const status = await api('/status');
