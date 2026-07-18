@@ -73,6 +73,12 @@ async fn main() -> anyhow::Result<()> {
     };
     let app = build_router(web_state);
 
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+        println!("Web server listening on 127.0.0.1:3000");
+        axum::serve(listener, app).await.unwrap();
+    });
+
     while let Some(item) = shard.next_event(event_types).await {
         let event = match item {
             Ok(event) => event,
