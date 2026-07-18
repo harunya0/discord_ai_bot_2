@@ -196,6 +196,32 @@ function fileToBase64(file) {
   });
 }
 
+// クリップボードからの画像ペースト（コピペ）に対応
+document.addEventListener('paste', (event) => {
+  const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+  let imageAdded = false;
+
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      const file = items[i].getAsFile();
+      if (file) {
+        // ペーストされた画像（スクショ等）に分かりやすいファイル名を自動付与
+        const ext = file.type.split('/')[1] || 'png';
+        const pastedFile = new File([file], `pasted_${Date.now()}.${ext}`, {
+          type: file.type
+        });
+        selectedFiles.push(pastedFile);
+        imageAdded = true;
+      }
+    }
+  }
+
+  // 画像がペーストされた場合はプレビューを更新
+  if (imageAdded) {
+    renderFilePreview();
+  }
+});
+
 document.getElementById('tokenInput').value = getToken();
 refreshStatus();
 setInterval(refreshStatus, 30000);
