@@ -39,11 +39,29 @@ function appendMsg(role, text) {
 async function sendMessage() {
   const input = document.getElementById('messageInput');
   const text = input.value.trim();
-  if (!text) return;
-  appendMsg('user', text);
+  if (!text && selectedFiles.length === 0) return;
+
+  let displayMsg = text;
+  if (selectedFiles.length > 0) {
+    const names = selectedFiles.map(f => `[📎 ${f.name}]`).join(' ');
+    displayMsg = displayMsg ? `${displayMsg}\n${names}` : names;
+  }
+
+  appendMsg('user', displayMsg);
   input.value = '';
+
+  const filePayloads = await Promise.all(selectedFiles.map(fileToBase64));
+  selectedFiles = [];
+  renderFilePreview();
+
   try {
-    const data = await api('/chat', { method: 'POST', body: JSON.stringify({ message: text }) });
+    const data = await api('/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message: text,
+        files: filePayloads
+      })
+    });
     appendMsg('bot', data.reply);
   } catch (e) {
     logSystem('エラー: ' + e.message);
@@ -135,6 +153,47 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+let selectedFiles = [];
+
+function handleFileSelect(event) {
+  const files = Array.from(event.target.files);
+  selectedFiles = selectedFiles.concat(files);
+  renderFilePreview();
+  event.target.value = '';
+}
+
+function renderFilePreview() {
+  const container = document.getElementById('filePreview');
+  if (!container) return;
+  container.innerHTML = '';
+  selectedFiles.forEach((file, index) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    chip.innerHTML = `<span>📎 ${escapeHtml(file.name)}</span><span class="remove" onclick="removeFile(${index})">×</span>`;
+    container.appendChild(chip);
+  });
+}
+
+function removeFile(index) {
+  selectedFiles.splice(index, 1);
+  renderFilePreview();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Data = reader.result.split(',')[1];
+      resolve({
+        name: file.name,
+        mime: file.type || 'text/plain',
+        data: base64Data
+      });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 document.getElementById('tokenInput').value = getToken();

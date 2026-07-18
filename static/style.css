@@ -160,3 +160,34 @@ button.full { width: 100%; }
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.file-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 24px;
+  background: var(--panel);
+}
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.file-chip .remove {
+  cursor: pointer;
+  color: var(--danger);
+  font-weight: bold;
+}
+.file-chip .remove:hover {
+  opacity: 0.8;
+}
+button.icon-btn {
+  padding: 7px 10px;
+  font-size: 14px;
+}
