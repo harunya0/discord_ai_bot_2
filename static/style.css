@@ -262,3 +262,94 @@ button.icon-btn {
   outline: 2px dashed var(--accent);
   outline-offset: -6px;
 }
+/* =========================================
+   スマホ用レスポンシブ対応 (768px以下)
+========================================= */
+
+/* 普段(PC)はメニューボタンとオーバーレイを隠す */
+.menu-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+.overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 999;
+  backdrop-filter: blur(2px);
+}
+
+@media (max-width: 768px) {
+  /* ステータスバーの整理（左側の項目を優先表示） */
+  #statusbar {
+    padding: 8px 12px;
+    gap: 12px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  /* サイドバーを画面外(左)に隠すスライドドロワー化 */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    bottom: 0;
+    width: 280px;
+    height: 100vh;
+    z-index: 1000;
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.5);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* .open がついたら画面内にスライドイン */
+  #sidebar.open {
+    left: 0;
+  }
+  
+  /* サイドバーが開いた時は背景オーバーレイを表示 */
+  .overlay.active {
+    display: block;
+  }
+
+  /* メインエリアとログエリアをスマホ画面にフィットさせる */
+  #main {
+    width: 100%;
+  }
+  #log {
+    padding: 12px;
+  }
+  .msg {
+    max-width: 100%;
+  }
+
+  /* 入力欄の調整と、iOSで勝手に拡大(ズーム)される現象の防止 */
+  #inputArea {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  input[type=text], input[type=password], select, textarea {
+    font-size: 16px !important; /* スマホブラウザは16px未満だとタップ時にズームされるため強制 */
+    padding: 10px;
+  }
+  button.primary {
+    padding: 10px 16px;
+  }
+  
+  /* プレビューカードを少しコンパクトに */
+  .file-card {
+    width: 90px;
+    height: 90px;
+  }
+}
