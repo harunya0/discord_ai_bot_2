@@ -2,30 +2,27 @@
    スマホ用レスポンシブ対応 (768px以下)
 ========================================= */
 @media (max-width: 768px) {
-  /* ステータスバーの整理：横スクロールをやめて折り返し、
-     入りきらない分だけ縦スクロールできるようにする */
+  /* ステータスバーの整理：2列グリッドにして、
+     どの項目も隠れずに並ぶようにする。入りきらない分だけ縦スクロール */
   #statusbar {
-    flex-wrap: wrap;
-    align-content: flex-start;
-    row-gap: 10px;
-    column-gap: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
     padding: 10px 14px;
-    max-height: 112px;
-    overflow-x: hidden;
+    max-height: 220px;
     overflow-y: auto;
-    white-space: normal;
+    overflow-x: hidden;
   }
   #statusbar .item {
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     font-size: 13px;
   }
   .menu-toggle {
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-shrink: 0;
-    width: 100%;
-    order: -1;
+    grid-column: 1 / -1;
   }
 
   /* サイドバーを画面外(左)に隠すスライドドロワー化 */
