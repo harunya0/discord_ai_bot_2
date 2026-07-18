@@ -5,7 +5,7 @@
 src/aiの中にGCPのAIのjson鍵を登録してください<br>
 また、AIのAPI使うので、API料金は別途かかります<br>
 あと、メッセージのアクセス権限が必要です<br>
-VPSのIPアドレスを入力し、接続のところに設定した文字列を入力すると応答します<br>
+VPSのIPアドレスを入力し（IPアドレス:3000）（3000番ポートで接続するため）、接続のところに設定した文字列を入力すると応答します<br>
 - 使用API（必須）
   - Discord API（discord連携させるものです。discord developer portalを参照ください）
   - GCP AI API（geminiのAPIです）
