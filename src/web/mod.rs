@@ -191,11 +191,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sessions/:name", delete(delete_session_handler))
         .route("/model", post(switch_model_handler))
         .route("/status", get(status_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
-        .route("/search", post(search_handler));
+        .route("/search", post(search_handler))
+        // API全体にトークン認証ミドルウェアを適用
+        .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     Router::new()
         .route("/", get(index_handler))
         .nest("/api", api_routes)
+        // ルート("/")や "/api" に該当しないリクエスト(app.jsやstyle.css等)は
+        // staticフォルダから探して返す
+        .fallback_service(ServeDir::new("static"))
         .with_state(state)
 }
