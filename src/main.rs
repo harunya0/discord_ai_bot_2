@@ -68,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
         history: Arc::clone(&history_store),
         channel_models: Arc::clone(&channel_models),
         channel_sessions: Arc::clone(&channel_sessions),
+        search_client: Arc::clone(&search_client),
         api_token: env::var("WEB_API_TOKEN").expect("WEB_API_TOKENが見つかりません"),
         start_time: Instant::now(),
     };
