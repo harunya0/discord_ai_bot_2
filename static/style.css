@@ -330,26 +330,33 @@ button.icon-btn {
   #log {
     padding: 12px;
   }
-  .msg {
-    max-width: 100%;
+  .msg{
+    width:100%;
   }
 
   /* 入力欄の調整と、iOSで勝手に拡大(ズーム)される現象の防止 */
-  #inputArea {
-    padding: 10px 12px;
-    gap: 6px;
+  #inputArea{
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
   }
   input[type=text], input[type=password], select, textarea {
     font-size: 16px !important; /* スマホブラウザは16px未満だとタップ時にズームされるため強制 */
     padding: 10px;
   }
-  button.primary {
-    padding: 10px 16px;
+  button.primary{
+    min-width:72px;
+    height:48px;
+    font-size:16px;
   }
   
   /* プレビューカードを少しコンパクトに */
   .file-card {
     width: 90px;
     height: 90px;
+  }
+  .file-preview{
+    overflow-x:auto;
+    flex-wrap:nowrap;
   }
 }
