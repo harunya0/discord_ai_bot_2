@@ -413,6 +413,13 @@ async function switchChannel() {
   }
 }
 
+document.getElementById('messageInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
 document.getElementById('tokenInput').value = getToken();
 refreshStatus();
 setInterval(refreshStatus, 30000);
