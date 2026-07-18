@@ -6,6 +6,7 @@ src/aiの中にGCPのAIのjson鍵を登録してください<br>
 また、AIのAPI使うので、API料金は別途かかります<br>
 あと、メッセージのアクセス権限が必要です<br>
 web機能を使う場合、アドレスを取得してください（Duck DNSが一番手軽かと）<br>
+使いたい場合、IaCがあるので使ってください(https://github.com/harunya0/ansible-iac)<br>
 - 使用API（必須）
   - Discord API（discord連携させるものです。discord developer portalを参照ください）
   - GCP AI API（geminiのAPIです）
