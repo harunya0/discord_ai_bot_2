@@ -5,6 +5,8 @@
 src/aiの中にGCPのAIのjson鍵を登録してください<br>
 また、AIのAPI使うので、API料金は別途かかります<br>
 あと、メッセージのアクセス権限が必要です<br>
+ssh -L 3000:127.0.0.1:3000 -i sshの鍵 ユーザー名@IPアドレス<br>
+上のコマンドを実行し、これでhttp://localhost:3000/  をブラウザで開くとweb上で開けます<br>
 - 使用API（必須）
   - Discord API（discord連携させるものです。discord developer portalを参照ください）
   - GCP AI API（geminiのAPIです）
