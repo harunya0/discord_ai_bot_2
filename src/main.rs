@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
     let app = build_router(web_state);
 
     tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
         println!("Web server listening on 0.0.0.0:3000");
         axum::serve(listener, app).await.unwrap();
     });
