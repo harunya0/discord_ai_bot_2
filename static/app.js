@@ -66,6 +66,10 @@ async function sendMessage() {
 
 async function refreshStatus() {
   try {
+    document.getElementById('sbChannel').textContent = status.current_channel_id === "0" ? "0 (Web単独)" : status.current_channel_id;
+    if (document.getElementById('channelInput').value === "") {
+      document.getElementById('channelInput').value = status.current_channel_id === "0" ? "" : status.current_channel_id;
+    }
     const status = await api('/status');
     document.getElementById('sbModel').textContent = status.current_model;
     document.getElementById('sbSession').textContent = status.current_session;
@@ -368,6 +372,14 @@ async function loadHistory() {
   } catch (e) {
     logSystem('履歴の読み込みに失敗しました: ' + e.message);
   }
+}
+
+async function switchChannel() {
+  const channel_id = document.getElementById('channelInput').value.trim() || "0";
+  await api('/channel', { method: 'POST', body: JSON.stringify({ channel_id }) });
+  logSystem('同期チャンネルを「' + (channel_id === "0" ? "Web単独 (0)" : channel_id) + '」に切り替えました');
+  currentLoadedSession = null; 
+  refreshStatus();
 }
 
 document.getElementById('tokenInput').value = getToken();

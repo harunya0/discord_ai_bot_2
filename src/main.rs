@@ -71,6 +71,7 @@ async fn main() -> anyhow::Result<()> {
         search_client: Arc::clone(&search_client),
         api_token: env::var("WEB_API_TOKEN").expect("WEB_API_TOKENが見つかりません"),
         start_time: Instant::now(),
+        target_channel_id: Arc::new(RwLock::new(0)),
     };
     let app = build_router(web_state);
 

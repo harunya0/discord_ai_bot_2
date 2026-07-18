@@ -41,6 +41,7 @@ pub struct AppState {
     pub search_client: Arc<WebSearchClient>,
     pub api_token: String,
     pub start_time: Instant,
+    pub target_channel_id: Arc<RwLock<u64>>,
 }
 
 #[derive(Deserialize)]
@@ -69,6 +70,11 @@ struct SwitchSessionRequest {
 #[derive(Deserialize)]
 struct SwitchModelRequest {
     name: String,
+}
+
+#[derive(Deserialize)]
+struct SwitchChannelRequest {
+    channel_id: String,
 }
 
 #[derive(Serialize)]
@@ -260,6 +266,12 @@ async fn switch_model_handler(State(state): State<AppState>, Json(req): Json<Swi
     StatusCode::OK
 }
 
+async fn switch_channel_handler(State(state): State<AppState>, Json(req): Json<SwitchChannelRequest>) -> StatusCode {
+    let id: u64 = req.channel_id.parse().unwrap_or(0);
+    *state.target_channel_id.write().await = id;
+    StatusCode::OK
+}
+
 async fn status_handler(State(state): State<AppState>) -> Json<StatusResponse> {
     let current_model = state.channel_models.read().await
         .get(&WEB_CHANNEL_ID).cloned().unwrap_or_else(|| "gemini-3.1-flash-lite (デフォルト)".to_string());
@@ -286,6 +298,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sessions/switch", post(switch_session_handler))
         .route("/sessions/:name", delete(delete_session_handler))
         .route("/model", post(switch_model_handler))
+        .route("/channel", post(switch_channel_handler))
         .route("/status", get(status_handler))
         .route("/search", post(search_handler))
         .route("/history", get(get_history_handler))
