@@ -236,3 +236,29 @@ button.icon-btn {
   padding: 7px 10px;
   font-size: 14px;
 }
+/* チャットログ内のファイル並べ用 */
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* チャット上のカードには削除ボタンを出さない */
+.chat-file-card {
+  cursor: default;
+}
+.chat-file-card:hover {
+  border-color: var(--accent-dim);
+}
+
+/* ドラッグ＆ドロップ時の枠線フィードバック */
+#main {
+  position: relative;
+  transition: background 0.2s, outline 0.2s;
+}
+#main.drag-over {
+  background: rgba(79, 209, 197, 0.05);
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+}
