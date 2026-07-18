@@ -71,6 +71,11 @@ async function refreshStatus() {
     document.getElementById('sbSession').textContent = status.current_session;
     document.getElementById('sbUptime').textContent = formatUptime(status.uptime_seconds);
     document.getElementById('modelSelect').value = status.current_model;
+    
+    if (currentLoadedSession !== status.current_session) {
+      currentLoadedSession = status.current_session;
+      await loadHistory();
+    }
 
     const sessions = await api('/sessions');
     const list = document.getElementById('sessionList');
@@ -345,6 +350,26 @@ if (dropZone) {
     }
   }, false);
 }
+
+let currentLoadedSession = null;
+
+async function loadHistory() {
+  const log = document.getElementById('log');
+  if (!log) return;
+  log.innerHTML = '';
+
+  try {
+    const history = await api('/history');
+    if (!history || !Array.isArray(history)) return;
+
+    history.forEach(item => {
+      appendMsg(item.role, item.text);
+    });
+  } catch (e) {
+    logSystem('履歴の読み込みに失敗しました: ' + e.message);
+  }
+}
+
 document.getElementById('tokenInput').value = getToken();
 refreshStatus();
 setInterval(refreshStatus, 30000);
