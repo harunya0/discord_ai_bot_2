@@ -67,6 +67,10 @@
     <div class="section">
       <div class="section-label">Web検索</div>
       <input type="text" id="searchQuery" placeholder="検索キーワード">
+      <label class="checkbox-row">
+        <input type="checkbox" id="searchAi" onchange="onSearchAiToggle()">
+        <span>AIによる要約回答</span>
+      </label>
       <div style="display:flex; gap:6px; margin-bottom:6px;">
         <input type="text" id="searchCount" value="5" style="width:56px;" title="件数">
         <button style="flex:1;" onclick="runSearch()">検索</button>

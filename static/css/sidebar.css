@@ -52,3 +52,45 @@
 .search-result .title { color: var(--accent); font-weight: 500; margin-bottom: 2px; }
 .search-result .url { color: var(--text-muted); font-size: 11px; word-break: break-all; margin-bottom: 4px; }
 .search-result .desc { color: var(--text-muted); line-height: 1.4; }
+
+/* Web検索の「AIによる要約回答」トグル */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.checkbox-row input[type=checkbox] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent-dim);
+  cursor: pointer;
+}
+#searchCount:disabled { opacity: 0.4; }
+
+/* AI要約回答の結果ブロック（Markdown描画） */
+.search-result-ai .ai-desc {
+  color: var(--text);
+  line-height: 1.55;
+  font-size: 12.5px;
+}
+.search-result-ai .ai-desc :first-child { margin-top: 0; }
+.search-result-ai .ai-desc :last-child { margin-bottom: 0; }
+.search-result-ai .ai-desc pre {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+.search-result-ai .ai-desc code { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; }
+.search-result-ai .ai-desc :not(pre) > code {
+  background: var(--panel);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.search-result-ai .ai-desc a { color: var(--accent); }
