@@ -88,6 +88,7 @@ struct StatusResponse {
 struct SearchRequest {
     query: String,
     count: Option<u8>,
+    ai: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -95,6 +96,13 @@ struct SearchResultItem {
     title: String,
     url: String,
     description: String,
+}
+
+#[derive(Serialize)]
+struct SearchResponse {
+    ai: bool,
+    text: Option<String>,
+    results: Option<Vec<SearchResultItem>>,
 }
 
 #[derive(Serialize)]
@@ -132,12 +140,29 @@ async fn get_history_handler(State(state): State<AppState>) -> Json<Vec<HistoryI
     Json(items)
 }
 
-async fn search_handler(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<Vec<SearchResultItem>> {
+async fn search_handler(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<SearchResponse> {
+    let use_ai = req.ai.unwrap_or(false);
+
+    if use_ai {
+        let text = match state.ai_client.generate_with_search(&req.query, "gemini-3-flash-preview").await {
+            Ok(text) => text,
+            Err(e) => {
+                eprintln!("AI検索エラー: {:?}", e);
+                "検索に失敗しました".to_string()
+            }
+        };
+        return Json(SearchResponse { ai: true, text: Some(text), results: None });
+    }
+
     let count = req.count.unwrap_or(5);
     let results = state.search_client.search(&req.query, count).await.unwrap_or_default();
-    Json(results.into_iter().map(|r| SearchResultItem {
-        title: r.title, url: r.url, description: r.description
-    }).collect())
+    Json(SearchResponse {
+        ai: false,
+        text: None,
+        results: Some(results.into_iter().map(|r| SearchResultItem {
+            title: r.title, url: r.url, description: r.description
+        }).collect()),
+    })
 }
 
 async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest>) -> Json<ChatResponse> {
