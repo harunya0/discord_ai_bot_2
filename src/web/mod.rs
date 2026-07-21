@@ -1,8 +1,8 @@
 use axum::{
     extract::{State, Path},
-    http::{StatusCode, HeaderMap},
+    http::{StatusCode, HeaderMap, Method, HeaderName, HeaderValue},
     middleware::{self, Next},
-    response::{Response, Html},
+    response::Response,
     routing::{get, post, delete},
     Json, Router,
 };
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use tower_http::services::ServeDir;
+use tower_http::cors::CorsLayer;
 use base64::{engine::general_purpose, Engine as _};
 
 use crate::ai::client::AiClient;
@@ -294,8 +294,29 @@ async fn status_handler(State(state): State<AppState>) -> Json<StatusResponse> {
     })
 }
 
-async fn index_handler() -> Html<&'static str> {
-    Html(include_str!("../../static/index.html"))
+/// フロントエンド(別サービス)からのアクセスを許可するCORS設定。
+/// WEB_ORIGIN環境変数に許可したいオリジン(例: https://web.example.com)を1つ指定する。
+/// 自分専用サービスのため、未設定の場合は起動時に警告を出しつつ全オリジンを許可する(認証はx-api-tokenで担保)。
+fn build_cors_layer() -> CorsLayer {
+    let allowed_header = HeaderName::from_static("x-api-token");
+
+    let layer = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_headers([axum::http::header::CONTENT_TYPE, allowed_header]);
+
+    match std::env::var("WEB_ORIGIN") {
+        Ok(origin) => match origin.parse::<HeaderValue>() {
+            Ok(value) => layer.allow_origin(value),
+            Err(_) => {
+                eprintln!("WEB_ORIGINの形式が不正です。全オリジンを許可します: {}", origin);
+                layer.allow_origin(tower_http::cors::Any)
+            }
+        },
+        Err(_) => {
+            eprintln!("WEB_ORIGINが未設定です。全オリジンを許可します(x-api-tokenでの認証は有効です)");
+            layer.allow_origin(tower_http::cors::Any)
+        }
+    }
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -312,8 +333,7 @@ pub fn build_router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     Router::new()
-        .route("/", get(index_handler))
         .nest("/api", api_routes)
-        .fallback_service(ServeDir::new("static"))
+        .layer(build_cors_layer())
         .with_state(state)
 }

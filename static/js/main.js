@@ -6,6 +6,7 @@ function autoGrowMessageInput() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('apiBaseInput').value = getApiBase();
   document.getElementById('tokenInput').value = getToken();
 
   const messageInput = document.getElementById('messageInput');
