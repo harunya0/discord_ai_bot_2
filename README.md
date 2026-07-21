@@ -100,6 +100,8 @@ APIは「どのDiscordチャンネル（セッション）を見る/操作する
 curl -H "x-api-token: $WEB_API_TOKEN" http://localhost:3000/api/status
 ```
 
+動作例は[こちら](https://github.com/harunya0/webFront)
+
 ## プロジェクト構成
 
 ```
