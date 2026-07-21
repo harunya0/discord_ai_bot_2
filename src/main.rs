@@ -76,8 +76,10 @@ async fn main() -> anyhow::Result<()> {
     let app = build_router(web_state);
 
     tokio::spawn(async move {
+        // 127.0.0.1でリッスンし、外部公開はCaddy等のリバースプロキシ経由を想定
+        // (別サービス化したWebフロントエンドはこのAPIをhttps://<公開ドメイン>/api/... で叩く)
         let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
-        println!("Web server listening on 0.0.0.0:3000");
+        println!("Web API listening on 127.0.0.1:3000 (reverse proxy推奨)");
         axum::serve(listener, app).await.unwrap();
     });
 

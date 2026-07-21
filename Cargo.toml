@@ -18,7 +18,7 @@ gcp_auth = "0.12"
 base64 = "0.22"
 axum = "0.7"
 tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "fs"] }
+tower-http = { version = "0.5", features = ["trace", "cors"] }
 
 [profile.release]
 lto = true
