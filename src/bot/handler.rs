@@ -11,6 +11,7 @@ use crate::search::WebSearchClient;
 use crate::ai::client::AiClient;
 use crate::ai::embedding::EmbeddingClient;
 use crate::ai::openai::OpenAiClient;
+use crate::ai::claude::ClaudeClient;
 use crate::strage::history::HistoryStore;
 use crate::rag;
 
@@ -30,6 +31,7 @@ pub async fn handle_message(
     channel_models: Arc<RwLock<HashMap<u64, String>>>,
     bot_id: Id<UserMarker>,
     openai_client: Arc<OpenAiClient>,
+    claude_client: Arc<ClaudeClient>,
     channel_sessions: Arc<RwLock<HashMap<u64, String>>>,
     search_client: Arc<WebSearchClient>,
 ) {
@@ -220,8 +222,11 @@ pub async fn handle_message(
             .unwrap_or_else(|| "gemini-3.1-flash-lite".to_string());
 
         let response = if model.starts_with("gpt-") {
-        let messages = crate::ai::convert::to_openai_messages(&contents);
-        openai_client.generate(messages, &model).await
+            let messages = crate::ai::convert::to_openai_messages(&contents);
+            openai_client.generate(messages, &model).await
+        } else if model.starts_with("claude-") {
+            let messages = crate::ai::convert::to_claude_messages(&contents);
+            claude_client.generate(messages, &model).await
         } else {
             ai_client.generate_with_contents(contents, &model).await
         };

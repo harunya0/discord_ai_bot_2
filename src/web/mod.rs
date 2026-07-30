@@ -17,6 +17,7 @@ use base64::{engine::general_purpose, Engine as _};
 
 use crate::ai::client::AiClient;
 use crate::ai::openai::OpenAiClient;
+use crate::ai::claude::ClaudeClient;
 use crate::ai::embedding::EmbeddingClient;
 use crate::strage::history::HistoryStore;
 use crate::rag;
@@ -32,6 +33,7 @@ const MAX_FILE_CHARS: usize = 8000;
 pub struct AppState {
     pub ai_client: Arc<AiClient>,
     pub openai_client: Arc<OpenAiClient>,
+    pub claude_client: Arc<ClaudeClient>,
     pub embedding_client: Arc<EmbeddingClient>,
     pub history: Arc<HistoryStore>,
     pub channel_models: Arc<RwLock<HashMap<u64, String>>>,
@@ -235,6 +237,9 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
     let reply = if model.starts_with("gpt-") {
         let messages = crate::ai::convert::to_openai_messages(&contents);
         state.openai_client.generate(messages, &model).await
+    } else if model.starts_with("claude-") {
+        let messages = crate::ai::convert::to_claude_messages(&contents);
+        state.claude_client.generate(messages, &model).await
     } else {
         state.ai_client.generate_with_contents(contents, &model).await
     }.unwrap_or_else(|_| "エラーが発生しました".to_string());

@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use ai::client::AiClient;
 use ai::openai::OpenAiClient;
+use ai::claude::ClaudeClient;
 use ai::embedding::EmbeddingClient;
 use strage::history::HistoryStore;
 use gcp_auth::CustomServiceAccount;
@@ -48,6 +49,11 @@ async fn main() -> anyhow::Result<()> {
     let embed_service_account = CustomServiceAccount::from_file(Path::new(&credentials_path))?;
     let embedding_client = Arc::new(EmbeddingClient::new(embed_service_account, project_id));
 
+    // Claude用クライアント(同じサービスアカウントでVertex AI Model Garden経由)
+    let claude_location = env::var("CLAUDE_LOCATION").unwrap_or_else(|_| "us-east5".to_string());
+    let claude_sa = CustomServiceAccount::from_file(Path::new(&credentials_path))?;
+    let claude_client = Arc::new(ClaudeClient::new(claude_sa, env::var("GCP_PROJECT_ID").unwrap(), claude_location, reqwest::Client::new()));
+
     let intents = Intents::GUILDS | Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT;
     let mut shard = Shard::new(ShardId::ONE, token.clone(), intents);
     let http = Arc::new(HttpClient::new(token));
@@ -64,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
     let web_state = AppState {
         ai_client: Arc::clone(&ai_client),
         openai_client: Arc::clone(&openai_client),
+        claude_client: Arc::clone(&claude_client),
         embedding_client: Arc::clone(&embedding_client),
         history: Arc::clone(&history_store),
         channel_models: Arc::clone(&channel_models),
@@ -109,12 +116,13 @@ async fn main() -> anyhow::Result<()> {
                 let bot_id = Arc::clone(&bot_id);
                 let channel_models = Arc::clone(&channel_models);
                 let openai_client = Arc::clone(&openai_client);
+                let claude_client = Arc::clone(&claude_client);
                 let channel_sessions = Arc::clone(&channel_sessions);
                 let search_client = Arc::clone(&search_client);
                 tokio::spawn(async move {
                     let id = *bot_id.read().await;
                     if let Some(id) = id {
-                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client, channel_sessions, search_client).await;
+                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client, claude_client, channel_sessions, search_client).await;
                     }
                 });
             }
@@ -164,7 +172,9 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
                     {"name": "gemini-3-flash-preview", "value": "gemini-3-flash-preview"},
                     {"name": "gemini-3.1-pro-preview", "value": "gemini-3.1-pro-preview"},
                     {"name": "gpt-4o-mini", "value": "gpt-4o-mini"},
-                    {"name": "gpt-4o", "value": "gpt-4o"}
+                    {"name": "gpt-4o", "value": "gpt-4o"},
+                    {"name": "claude-sonnet-4-6", "value": "claude-sonnet-4-6"},
+                    {"name": "claude-haiku-35-20250620", "value": "claude-haiku-35-20250620"}
                 ]
             }]
         },

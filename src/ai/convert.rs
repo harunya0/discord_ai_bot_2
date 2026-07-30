@@ -33,3 +33,39 @@ pub fn to_openai_messages(contents: &[serde_json::Value]) -> Vec<serde_json::Val
         json!({ "role": openai_role, "content": content })
     }).collect()
 }
+
+pub fn to_claude_messages(contents: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    contents.iter().map(|c| {
+        let role = c["role"].as_str().unwrap_or("user");
+        let claude_role = if role == "model" { "assistant" } else { "user" };
+
+        let parts = c["parts"].as_array().cloned().unwrap_or_default();
+
+        if parts.len() == 1 {
+            if let Some(text) = parts[0]["text"].as_str() {
+                return json!({ "role": claude_role, "content": text });
+            }
+        }
+
+        let content: Vec<serde_json::Value> = parts.iter().filter_map(|p| {
+            if let Some(text) = p["text"].as_str() {
+                Some(json!({ "type": "text", "text": text }))
+            } else if let Some(inline) = p.get("inlineData") {
+                let mime = inline["mimeType"].as_str().unwrap_or("image/png");
+                let data = inline["data"].as_str().unwrap_or("");
+                Some(json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime,
+                        "data": data
+                    }
+                }))
+            } else {
+                None
+            }
+        }).collect();
+
+        json!({ "role": claude_role, "content": content })
+    }).collect()
+}
