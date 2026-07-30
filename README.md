@@ -36,7 +36,7 @@ Discord上でAI（Gemini / GPT）と会話できるBotです。Discordのスラ�
 ### 1. クローン
 
 ```bash
-git clone https://github.com/あなたのID/discord_ai_bot.git
+git clone https://github.com/harunya0/discord_ai_bot.git
 cd discord_ai_bot
 ```
 
