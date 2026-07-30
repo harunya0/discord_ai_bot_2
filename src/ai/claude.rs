@@ -39,10 +39,12 @@ impl ClaudeClient {
             .await
             .context("Failed to get GCP token")?;
 
-        let target_model = match model {
-            "claude-sonnet-5" | "claude-3-5-sonnet" | "claude-sonnet-4-6" => "claude-3-5-sonnet-v2@20241022",
-            "claude-opus-5" | "claude-3-opus" => "claude-3-opus@20240229",
-            m => m,
+        let target_model = if model.starts_with("claude-sonnet-5") {
+            "claude-sonnet-5"
+        } else if model.starts_with("claude-opus-5") {
+            "claude-opus-5"
+        } else {
+            model
         };
 
         let url = format!(
