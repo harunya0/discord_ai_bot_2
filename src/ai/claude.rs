@@ -16,8 +16,8 @@ impl ClaudeClient {
         location: String,
         http: reqwest::Client,
     ) -> Self {
-        let location = if location.is_empty() {
-            "us-east5".to_string()
+        let location = if location.is_empty() || location == "us-east5" {
+            "us-central1".to_string()
         } else {
             location
         };
