@@ -234,7 +234,7 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
     current_parts.extend(image_parts);
     contents.push(serde_json::json!({ "role": "user", "parts": current_parts }));
 
-    let reply = if model.starts_with("gpt-") {
+    let reply = match if model.starts_with("gpt-") {
         let messages = crate::ai::convert::to_openai_messages(&contents);
         state.openai_client.generate(messages, &model).await
     } else if model.starts_with("claude-") {
@@ -242,7 +242,13 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
         state.claude_client.generate(messages, &model).await
     } else {
         state.ai_client.generate_with_contents(contents, &model).await
-    }.unwrap_or_else(|_| "エラーが発生しました".to_string());
+    } {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("[ERROR] Chat generation error: {:?}", err);
+            format!("エラーが発生しました: {}", err)
+        }
+    };
 
     let bot_embedding = state.embedding_client.embed(&reply, "RETRIEVAL_DOCUMENT").await.unwrap_or_default();
     let _ = state.history.save_message(&db_key, "bot", "model", &reply, &bot_embedding);

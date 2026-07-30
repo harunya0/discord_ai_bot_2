@@ -40,9 +40,9 @@ impl ClaudeClient {
             .context("Failed to get GCP token")?;
 
         let target_model = if model.starts_with("claude-sonnet-5") {
-            "claude-sonnet-5"
+            "claude-3-5-sonnet-v2@20241022"
         } else if model.starts_with("claude-opus-5") {
-            "claude-opus-5"
+            "claude-3-opus@20240229"
         } else {
             model
         };
