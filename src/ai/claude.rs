@@ -40,9 +40,8 @@ impl ClaudeClient {
             .context("Failed to get GCP token")?;
 
         let target_model = match model {
-            "claude-sonnet-4-6" | "claude-3-5-sonnet" => "claude-3-5-sonnet-v2@20241022",
-            "claude-haiku-35-20250620" | "claude-3-5-haiku" => "claude-3-5-haiku@20241022",
-            "claude-3-opus" => "claude-3-opus@20240229",
+            "claude-sonnet-5" | "claude-3-5-sonnet" | "claude-sonnet-4-6" => "claude-3-5-sonnet-v2@20241022",
+            "claude-opus-5" | "claude-3-opus" => "claude-3-opus@20240229",
             m => m,
         };
 
@@ -51,9 +50,17 @@ impl ClaudeClient {
             self.location, self.project_id, self.location, target_model
         );
 
+        let max_tokens = if model.contains("-low") {
+            1024
+        } else if model.contains("-high") {
+            8192
+        } else {
+            4096
+        };
+
         let body = json!({
             "anthropic_version": "vertex-2023-10-16",
-            "max_tokens": 4096,
+            "max_tokens": max_tokens,
             "messages": messages,
         });
 
