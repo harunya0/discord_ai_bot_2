@@ -39,9 +39,16 @@ impl ClaudeClient {
             .await
             .context("Failed to get GCP token")?;
 
+        let target_model = match model {
+            "claude-sonnet-4-6" | "claude-3-5-sonnet" => "claude-3-5-sonnet-v2@20241022",
+            "claude-haiku-35-20250620" | "claude-3-5-haiku" => "claude-3-5-haiku@20241022",
+            "claude-3-opus" => "claude-3-opus@20240229",
+            m => m,
+        };
+
         let url = format!(
             "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/anthropic/models/{}:rawPredict",
-            self.location, self.project_id, self.location, model
+            self.location, self.project_id, self.location, target_model
         );
 
         let body = json!({

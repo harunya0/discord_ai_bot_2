@@ -171,10 +171,11 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
                     {"name": "gemini-3.1-flash-lite", "value": "gemini-3.1-flash-lite"},
                     {"name": "gemini-3-flash-preview", "value": "gemini-3-flash-preview"},
                     {"name": "gemini-3.1-pro-preview", "value": "gemini-3.1-pro-preview"},
+                    {"name": "claude-3-5-sonnet-v2", "value": "claude-3-5-sonnet-v2@20241022"},
+                    {"name": "claude-3-5-haiku", "value": "claude-3-5-haiku@20241022"},
+                    {"name": "claude-3-opus", "value": "claude-3-opus@20240229"},
                     {"name": "gpt-4o-mini", "value": "gpt-4o-mini"},
-                    {"name": "gpt-4o", "value": "gpt-4o"},
-                    {"name": "claude-sonnet-4-6", "value": "claude-sonnet-4-6"},
-                    {"name": "claude-haiku-35-20250620", "value": "claude-haiku-35-20250620"}
+                    {"name": "gpt-4o", "value": "gpt-4o"}
                 ]
             }]
         },
