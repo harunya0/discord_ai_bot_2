@@ -62,8 +62,8 @@ impl ClaudeClient {
 
         let body = json!({
             "anthropic_version": "vertex-2023-10-16",
-            "max_tokens": max_tokens,
             "messages": messages,
+            "max_tokens": max_tokens,
         });
 
         if is_debug {
