@@ -1,10 +1,9 @@
 [CmdletBinding()]
 param(
-    [string]$RemoteHost = "myserver",
+    [string]$RemoteHost = "discord_bot",
     [string]$RemoteDir = "/home/haru/discord_ai_bot_2",
     [string]$ServiceName = "discord-ai-bot",
-    [string]$IdentityFile = "", # 秘密鍵パス (Windows パス 'C:\Users\harun\.ssh\id_rsa' または WSL パス '~/.ssh/id_rsa')
-    [string]$WslDistro = "",
+    [string]$IdentityFile = "", # オプション: 秘密鍵パス (未指定時は ~/.ssh/config やデフォルト鍵を使用)
     [switch]$SkipRestart = $false
 )
 
@@ -15,83 +14,26 @@ $ErrorActionPreference = "Stop"
 # ==============================================================================
 $ProjectDir = (Resolve-Path $PSScriptRoot).Path
 $BinaryName = "discord_ai_bot"
-$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-
-# 秘密鍵パスの事前検証 (Windows パスと思われる場合は存在確認)
-$ResolvedIdentityFile = $IdentityFile
-if ($IdentityFile) {
-    $isWindowsPath = $IdentityFile -match "^[a-zA-Z]:" -or $IdentityFile.Contains("\") -or (Test-Path $IdentityFile)
-    if ($isWindowsPath) {
-        if (-not (Test-Path $IdentityFile)) {
-            throw "[ERROR] Specified Windows IdentityFile was not found: $IdentityFile"
-        }
-        $ResolvedIdentityFile = (Resolve-Path $IdentityFile).Path
-    }
-}
 
 # コミット情報の取得
 $CommitHash = git -C "$ProjectDir" rev-parse --short HEAD 2>$null
 $CommitSummary = git -C "$ProjectDir" log -1 --format="%h - %s (%cr) <%an>" 2>$null
 
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " Discord AI Bot Native Server Deployment via SSH" -ForegroundColor Cyan
-Write-Host " Target: $($RemoteHost):$($RemoteDir) (Service: $($ServiceName))" -ForegroundColor Cyan
+Write-Host " Discord AI Bot Fast Native Deployment" -ForegroundColor Cyan
+Write-Host " Target:  ${RemoteHost}:${RemoteDir} (Service: ${ServiceName})" -ForegroundColor Cyan
 if ($CommitSummary) {
-    Write-Host " Commit: $CommitSummary" -ForegroundColor Cyan
+    Write-Host " Commit:  $CommitSummary" -ForegroundColor Cyan
 }
-if ($ResolvedIdentityFile) {
-    Write-Host " Key:    $ResolvedIdentityFile" -ForegroundColor Cyan
+if ($IdentityFile) {
+    Write-Host " Key:     $IdentityFile" -ForegroundColor Cyan
 }
 Write-Host "================================================================" -ForegroundColor Cyan
 
-# ==============================================================================
-# Helper Functions
-# ==============================================================================
-
-function Convert-ToWslPath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if (-not $Path) { return "" }
-    if ($Path.StartsWith("/") -or $Path.StartsWith("~")) { return $Path }
-
-    $fullWinPath = if (Test-Path $Path) { (Resolve-Path $Path).Path } else { $Path }
-    if ($fullWinPath -match "^([a-zA-Z]):\\?(.*)$") {
-        $driveLetter = $Matches[1].ToLower()
-        $subPath = $Matches[2] -replace "\\", "/"
-        return "/mnt/$driveLetter/$subPath"
-    }
-
-    try {
-        $wslOut = if ($WslDistro) { & wsl.exe -d $WslDistro -- wslpath -a -u "$fullWinPath" 2>$null } else { & wsl.exe -- wslpath -a -u "$fullWinPath" 2>$null }
-        if ($wslOut) { return ($wslOut | Out-String).Trim() }
-    }
-    catch {}
-
-    throw "Failed to convert path to WSL format: $Path"
-}
-
-function Invoke-WSL {
-    param([Parameter(Mandatory = $true)][string]$Command)
-
-    $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $processInfo.FileName = "wsl.exe"
-    if ($WslDistro) {
-        $processInfo.Arguments = "-d $WslDistro -- bash -s"
-    } else {
-        $processInfo.Arguments = "-- bash -s"
-    }
-    $processInfo.RedirectStandardInput = $true
-    $processInfo.UseShellExecute = $false
-
-    $process = [System.Diagnostics.Process]::Start($processInfo)
-    $writer = [System.IO.StreamWriter]$process.StandardInput
-    $writer.Write("set -e`n$Command")
-    $writer.Close()
-    $process.WaitForExit()
-
-    if ($process.ExitCode -ne 0) {
-        throw "WSL command failed with exit code $($process.ExitCode)"
-    }
+# SSH コマンドの組み立て
+$sshArgs = @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new")
+if ($IdentityFile) {
+    $sshArgs += @("-i", $IdentityFile)
 }
 
 function Test-GitWorkingTree {
@@ -112,68 +54,65 @@ function Test-GitWorkingTree {
     Write-Host "  -> Git working tree is clean or confirmed." -ForegroundColor Green
 }
 
-function Deploy-SourceAndBuildOnServer {
+function Sync-SourceCode {
     Write-Host "`n[2/3] Syncing source code to remote server ($RemoteHost)..." -ForegroundColor Yellow
 
-    $wslProjectPath = Convert-ToWslPath -Path $ProjectDir
-    $wslKeyPath = if ($ResolvedIdentityFile) { Convert-ToWslPath -Path $ResolvedIdentityFile } else { "" }
+    # リモートに必要なディレクトリを作成
+    $mkdirCmd = "mkdir -p '$RemoteDir/src' '$RemoteDir/data'"
+    & ssh @sshArgs $RemoteHost $mkdirCmd
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to prepare remote directory: $RemoteDir"
+    }
 
-    Invoke-WSL @"
-set -e
+    # git archive をリモートへストリーム転送して展開
+    $tarCmd = "tar -xf - -C '$RemoteDir'"
+    & git -C "$ProjectDir" archive HEAD | & ssh @sshArgs $RemoteHost $tarCmd
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to stream source archive to remote server."
+    }
 
-SSH_KEY_ARG=""
-if [ -n '$wslKeyPath' ]; then
-    SSH_KEY_ARG="-i '$wslKeyPath'"
-fi
+    Write-Host "  -> Source synced successfully to ${RemoteHost}:${RemoteDir}" -ForegroundColor Green
+}
 
-SSH_CMD="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new `$SSH_KEY_ARG"
-
-# 1. リモートに必要なディレクトリを作成
-`$SSH_CMD '$RemoteHost' "mkdir -p '$RemoteDir/src' '$RemoteDir/data'"
-
-# 2. 最新のソースコードをストリーム転送してリモートで展開
-cd '$wslProjectPath'
-git archive HEAD | `$SSH_CMD '$RemoteHost' "tar -xf - -C '$RemoteDir'"
-
-echo "  -> Source synced successfully to ${RemoteHost}:${RemoteDir}"
-"@
-
+function Build-AndRestartOnServer {
     Write-Host "`n[3/3] Building binary natively on remote server ($RemoteHost)..." -ForegroundColor Yellow
 
-    Invoke-WSL @"
+    $remoteScript = @"
 set -e
 
-SSH_KEY_ARG=""
-if [ -n '$wslKeyPath' ]; then
-    SSH_KEY_ARG="-i '$wslKeyPath'"
+# Cargo の PATH 設定 (未インストールの場合は自動インストール)
+if [ -f "`$HOME/.cargo/env" ]; then
+    . "`$HOME/.cargo/env"
+fi
+export PATH="`$HOME/.cargo/bin:`$PATH"
+
+if ! command -v cargo >/dev/null 2>&1; then
+    echo '[INFO] Rust/Cargo not found. Installing Rust on remote server...'
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    . "`$HOME/.cargo/env"
 fi
 
-SSH_CMD="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new `$SSH_KEY_ARG"
+cd '$RemoteDir'
+echo '[INFO] Running native cargo build --release...'
+cargo build --release --bin '$BinaryName'
+chmod +x '$RemoteDir/target/release/$BinaryName'
+echo '  -> Binary built successfully: $RemoteDir/target/release/$BinaryName'
 
-`$SSH_CMD '$RemoteHost' "
-    set -e
-    [ -f "`$HOME/.cargo/env" ] && . "`$HOME/.cargo/env"
-    export PATH="`$HOME/.cargo/bin:`$PATH"
-
-    if ! command -v cargo >/dev/null 2>&1; then
-        echo '[INFO] Installing Rust/Cargo on remote server...'
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        . "`$HOME/.cargo/env"
-    fi
-
-    cd '$RemoteDir'
-    echo '[INFO] Running native cargo build --release...'
-    cargo build --release --bin '$BinaryName'
-    chmod +x '$RemoteDir/target/release/$BinaryName'
-
-    $(if (-not $SkipRestart) {
-    "echo '[INFO] Restarting $ServiceName.service...'
-    sudo -n /usr/bin/systemctl restart $ServiceName
-    sudo -n /usr/bin/systemctl is-active --quiet $ServiceName
-    echo '  -> $ServiceName is active and running!'"
-    })
-"
+$(if (-not $SkipRestart) {
+@"
+echo '[INFO] Restarting $ServiceName.service...'
+sudo -n /usr/bin/systemctl restart $ServiceName
+sudo -n /usr/bin/systemctl is-active --quiet $ServiceName
+echo '  -> $ServiceName is active and running!'
 "@
+})
+"@
+
+    & ssh @sshArgs $RemoteHost $remoteScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Server build or service restart failed with exit code $LASTEXITCODE"
+    }
+
     Write-Host "  -> Server build and service restart completed successfully." -ForegroundColor Green
 }
 
@@ -185,7 +124,8 @@ $succeeded = $false
 
 try {
     Test-GitWorkingTree
-    Deploy-SourceAndBuildOnServer
+    Sync-SourceCode
+    Build-AndRestartOnServer
     $succeeded = $true
 }
 catch {
