@@ -2,6 +2,7 @@
 AI_API_KEY.json
 /.fastembed_cache
 /data
+*.ps1
 
 # Created by https://www.toptal.com/developers/gitignore/api/rust
 # Edit at https://www.toptal.com/developers/gitignore?templates=rust
