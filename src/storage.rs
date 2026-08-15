@@ -1,5 +1,6 @@
 use rugst::{Rugst, SearchOptions, SearchResult};
 use rusqlite::Connection;
+use std::path::Path;
 use std::sync::Mutex;
 
 pub struct HistoryStore {
@@ -9,6 +10,13 @@ pub struct HistoryStore {
 
 impl HistoryStore {
     pub fn new(db_path: &str) -> anyhow::Result<Self> {
+        // 親ディレクトリが存在しない場合は自動作成
+        if let Some(parent) = Path::new(db_path).parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
         let rugst = Rugst::new(db_path)?;
         let conn = Connection::open(db_path)?;
         Ok(Self {
@@ -93,7 +101,7 @@ mod tests {
     #[test]
     fn test_history_store_remember_and_search() {
         let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_rugst_history_2.db");
+        let db_path = temp_dir.join("test_rugst_history_auto_dir/history.db");
         let db_str = db_path.to_str().unwrap();
 
         // 既存ファイルをクリーンアップ
