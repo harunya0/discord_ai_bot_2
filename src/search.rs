@@ -23,7 +23,8 @@ impl WebSearchClient {
     pub async fn search(&self, query: &str, count: u8) -> anyhow::Result<Vec<SearchResult>> {
         let url = "https://api.search.brave.com/res/v1/web/search";
 
-        let res = self.http
+        let res = self
+            .http
             .get(url)
             .header("X-Subscription-Token", &self.api_key)
             .header("Accept", "application/json")

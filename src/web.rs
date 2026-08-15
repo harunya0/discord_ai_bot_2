@@ -1,38 +1,35 @@
 use axum::{
-    extract::{State, Path},
-    http::{StatusCode, HeaderMap, Method, HeaderName, HeaderValue},
+    extract::{Path, State},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Json, Router,
 };
 use axum::extract::Request;
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
-use base64::{engine::general_purpose, Engine as _};
 
 use crate::ai::client::AiClient;
 use crate::ai::openai::OpenAiClient;
-use crate::ai::embedding::EmbeddingClient;
-use crate::strage::history::HistoryStore;
-use crate::rag;
 use crate::search::WebSearchClient;
+use crate::storage::{default_rag_search_options, HistoryStore};
 
-const TEXT_EXTENSIONS: [&str; 15] = [
+pub const TEXT_EXTENSIONS: [&str; 15] = [
     "txt", "md", "rs", "py", "js", "ts", "json", "toml", "yaml", "yml",
     "csv", "html", "css", "c", "cpp",
 ];
-const MAX_FILE_CHARS: usize = 8000;
+pub const MAX_FILE_CHARS: usize = 8000;
 
 #[derive(Clone)]
 pub struct AppState {
     pub ai_client: Arc<AiClient>,
     pub openai_client: Arc<OpenAiClient>,
-    pub embedding_client: Arc<EmbeddingClient>,
     pub history: Arc<HistoryStore>,
     pub channel_models: Arc<RwLock<HashMap<u64, String>>>,
     pub channel_sessions: Arc<RwLock<HashMap<u64, String>>>,
@@ -117,7 +114,10 @@ async fn auth_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let provided = headers.get("x-api-token").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let provided = headers
+        .get("x-api-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
     if provided != state.api_token {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -126,53 +126,106 @@ async fn auth_middleware(
 
 async fn get_history_handler(State(state): State<AppState>) -> Json<Vec<HistoryItem>> {
     let ch_id = *state.target_channel_id.read().await;
-    let session = state.channel_sessions.read().await
-        .get(&ch_id).cloned().unwrap_or_else(|| "default".to_string());
+    let session = state
+        .channel_sessions
+        .read()
+        .await
+        .get(&ch_id)
+        .cloned()
+        .unwrap_or_else(|| "default".to_string());
     let db_key = format!("{}:{}", ch_id, session);
 
-    let recent = state.history.get_recent_history(&db_key, 50).unwrap_or_default();
+    let recent = state
+        .history
+        .get_recent_history(&db_key, 50)
+        .unwrap_or_default();
 
-    let items = recent.into_iter().map(|(role, text)| {
-        let display_role = if role == "model" || role == "bot" { "bot".to_string() } else { "user".to_string() };
-        HistoryItem { role: display_role, text }
-    }).collect();
+    let items = recent
+        .into_iter()
+        .map(|(role, text)| {
+            let display_role = if role == "model" || role == "bot" {
+                "bot".to_string()
+            } else {
+                "user".to_string()
+            };
+            HistoryItem {
+                role: display_role,
+                text,
+            }
+        })
+        .collect();
 
     Json(items)
 }
 
-async fn search_handler(State(state): State<AppState>, Json(req): Json<SearchRequest>) -> Json<SearchResponse> {
+async fn search_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SearchRequest>,
+) -> Json<SearchResponse> {
     let use_ai = req.ai.unwrap_or(false);
 
     if use_ai {
-        let text = match state.ai_client.generate_with_search(&req.query, "gemini-3-flash-preview").await {
+        let text = match state
+            .ai_client
+            .generate_with_search(&req.query, "gemini-3-flash-preview")
+            .await
+        {
             Ok(text) => text,
             Err(e) => {
                 eprintln!("AI検索エラー: {:?}", e);
                 "検索に失敗しました".to_string()
             }
         };
-        return Json(SearchResponse { ai: true, text: Some(text), results: None });
+        return Json(SearchResponse {
+            ai: true,
+            text: Some(text),
+            results: None,
+        });
     }
 
     let count = req.count.unwrap_or(5);
-    let results = state.search_client.search(&req.query, count).await.unwrap_or_default();
+    let results = state
+        .search_client
+        .search(&req.query, count)
+        .await
+        .unwrap_or_default();
     Json(SearchResponse {
         ai: false,
         text: None,
-        results: Some(results.into_iter().map(|r| SearchResultItem {
-            title: r.title, url: r.url, description: r.description
-        }).collect()),
+        results: Some(
+            results
+                .into_iter()
+                .map(|r| SearchResultItem {
+                    title: r.title,
+                    url: r.url,
+                    description: r.description,
+                })
+                .collect(),
+        ),
     })
 }
 
-async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest>) -> Json<ChatResponse> {
+async fn chat_handler(
+    State(state): State<AppState>,
+    Json(req): Json<ChatRequest>,
+) -> Json<ChatResponse> {
     let ch_id = *state.target_channel_id.read().await;
-    let session = state.channel_sessions.read().await
-        .get(&ch_id).cloned().unwrap_or_else(|| "default".to_string());
+    let session = state
+        .channel_sessions
+        .read()
+        .await
+        .get(&ch_id)
+        .cloned()
+        .unwrap_or_else(|| "default".to_string());
     let db_key = format!("{}:{}", ch_id, session);
 
-    let model = state.channel_models.read().await
-        .get(&ch_id).cloned().unwrap_or_else(|| "gemini-3.1-flash-lite".to_string());
+    let model = state
+        .channel_models
+        .read()
+        .await
+        .get(&ch_id)
+        .cloned()
+        .unwrap_or_else(|| "gemini-3.1-flash-lite".to_string());
 
     let mut image_parts: Vec<serde_json::Value> = Vec::new();
     let mut file_texts: Vec<String> = Vec::new();
@@ -188,8 +241,15 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
                 if let Ok(bytes) = general_purpose::STANDARD.decode(&file.data) {
                     if let Ok(text) = String::from_utf8(bytes) {
                         let truncated: String = text.chars().take(MAX_FILE_CHARS).collect();
-                        let note = if text.chars().count() > MAX_FILE_CHARS { "\n...(以降省略)" } else { "" };
-                        file_texts.push(format!("添付ファイル「{}」の内容:\n```\n{}{}\n```", file.name, truncated, note));
+                        let note = if text.chars().count() > MAX_FILE_CHARS {
+                            "\n...(以降省略)"
+                        } else {
+                            ""
+                        };
+                        file_texts.push(format!(
+                            "添付ファイル「{}」の内容:\n```\n{}{}\n```",
+                            file.name, truncated, note
+                        ));
                     }
                 }
             }
@@ -201,13 +261,24 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
     } else {
         req.message.clone()
     };
-    let user_embedding = state.embedding_client.embed(&embed_text, "RETRIEVAL_DOCUMENT").await.unwrap_or_default();
-    let _ = state.history.save_message(&db_key, "web_user", "user", &embed_text, &user_embedding);
 
-    let query_embedding = state.embedding_client.embed(&embed_text, "RETRIEVAL_QUERY").await.unwrap_or_default();
-    let candidates = state.history.get_candidates_for_search(&db_key, 300).unwrap_or_default();
-    let relevant = rag::rag::search_similar_with_decay(&candidates, &query_embedding, 3, 14.0, 0.3);
+    // 1. メッセージ保存 (FastEmbed埋め込みを自動生成・保存)
+    if let Err(e) = state
+        .history
+        .remember(&db_key, "web_user", "user", &embed_text)
+    {
+        eprintln!("履歴保存エラー: {:?}", e);
+    }
 
+    // 2. RAG検索 (rugst ハイブリッド検索 + 時間減衰)
+    let search_opts = default_rag_search_options();
+    let relevant_results = state
+        .history
+        .search(&db_key, "user", &embed_text, &search_opts)
+        .unwrap_or_default();
+    let relevant: Vec<String> = relevant_results.into_iter().map(|r| r.text).collect();
+
+    // 3. 直近履歴
     let recent = state.history.get_recent_history(&db_key, 10).unwrap_or_default();
 
     let mut contents: Vec<serde_json::Value> = Vec::new();
@@ -221,7 +292,9 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
 
     let mut combined_text = req.message.clone();
     if !file_texts.is_empty() {
-        if !combined_text.trim().is_empty() { combined_text.push_str("\n\n"); }
+        if !combined_text.trim().is_empty() {
+            combined_text.push_str("\n\n");
+        }
         combined_text.push_str(&file_texts.join("\n\n"));
     }
 
@@ -237,27 +310,39 @@ async fn chat_handler(State(state): State<AppState>, Json(req): Json<ChatRequest
         state.openai_client.generate(messages, &model).await
     } else {
         state.ai_client.generate_with_contents(contents, &model).await
-    }.unwrap_or_else(|_| "エラーが発生しました".to_string());
+    }
+    .unwrap_or_else(|_| "エラーが発生しました".to_string());
 
-    let bot_embedding = state.embedding_client.embed(&reply, "RETRIEVAL_DOCUMENT").await.unwrap_or_default();
-    let _ = state.history.save_message(&db_key, "bot", "model", &reply, &bot_embedding);
+    // 4. ボット応答保存
+    if let Err(e) = state.history.remember(&db_key, "bot", "model", &reply) {
+        eprintln!("履歴保存エラー: {:?}", e);
+    }
 
     Json(ChatResponse { reply })
 }
 
 async fn list_sessions_handler(State(state): State<AppState>) -> Json<Vec<String>> {
     let ch_id = *state.target_channel_id.read().await;
-    let sessions = state.history.list_sessions(&ch_id.to_string()).unwrap_or_default();
+    let sessions = state
+        .history
+        .list_sessions(&ch_id.to_string())
+        .unwrap_or_default();
     Json(sessions)
 }
 
-async fn switch_session_handler(State(state): State<AppState>, Json(req): Json<SwitchSessionRequest>) -> StatusCode {
+async fn switch_session_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SwitchSessionRequest>,
+) -> StatusCode {
     let ch_id = *state.target_channel_id.read().await;
     state.channel_sessions.write().await.insert(ch_id, req.name);
     StatusCode::OK
 }
 
-async fn delete_session_handler(State(state): State<AppState>, Path(name): Path<String>) -> StatusCode {
+async fn delete_session_handler(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> StatusCode {
     let ch_id = *state.target_channel_id.read().await;
     match state.history.delete_session(&ch_id.to_string(), &name) {
         Ok(_) => StatusCode::OK,
@@ -265,13 +350,19 @@ async fn delete_session_handler(State(state): State<AppState>, Path(name): Path<
     }
 }
 
-async fn switch_model_handler(State(state): State<AppState>, Json(req): Json<SwitchModelRequest>) -> StatusCode {
+async fn switch_model_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SwitchModelRequest>,
+) -> StatusCode {
     let ch_id = *state.target_channel_id.read().await;
     state.channel_models.write().await.insert(ch_id, req.name);
     StatusCode::OK
 }
 
-async fn switch_channel_handler(State(state): State<AppState>, Json(req): Json<SwitchChannelRequest>) -> StatusCode {
+async fn switch_channel_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SwitchChannelRequest>,
+) -> StatusCode {
     let id: u64 = req.channel_id.parse().unwrap_or(0);
     *state.target_channel_id.write().await = id;
     StatusCode::OK
@@ -279,11 +370,25 @@ async fn switch_channel_handler(State(state): State<AppState>, Json(req): Json<S
 
 async fn status_handler(State(state): State<AppState>) -> Json<StatusResponse> {
     let ch_id = *state.target_channel_id.read().await;
-    let current_model = state.channel_models.read().await
-        .get(&ch_id).cloned().unwrap_or_else(|| "gemini-3.1-flash-lite (デフォルト)".to_string());
-    let current_session = state.channel_sessions.read().await
-        .get(&ch_id).cloned().unwrap_or_else(|| "default".to_string());
-    let session_count = state.history.list_sessions(&ch_id.to_string()).unwrap_or_default().len();
+    let current_model = state
+        .channel_models
+        .read()
+        .await
+        .get(&ch_id)
+        .cloned()
+        .unwrap_or_else(|| "gemini-3.1-flash-lite (デフォルト)".to_string());
+    let current_session = state
+        .channel_sessions
+        .read()
+        .await
+        .get(&ch_id)
+        .cloned()
+        .unwrap_or_else(|| "default".to_string());
+    let session_count = state
+        .history
+        .list_sessions(&ch_id.to_string())
+        .unwrap_or_default()
+        .len();
 
     Json(StatusResponse {
         current_channel_id: ch_id.to_string(),
@@ -308,7 +413,10 @@ fn build_cors_layer() -> CorsLayer {
         Ok(origin) => match origin.parse::<HeaderValue>() {
             Ok(value) => layer.allow_origin(value),
             Err(_) => {
-                eprintln!("WEB_ORIGINの形式が不正です。全オリジンを許可します: {}", origin);
+                eprintln!(
+                    "WEB_ORIGINの形式が不正です。全オリジンを許可します: {}",
+                    origin
+                );
                 layer.allow_origin(tower_http::cors::Any)
             }
         },
@@ -330,7 +438,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status", get(status_handler))
         .route("/search", post(search_handler))
         .route("/history", get(get_history_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
 
     Router::new()
         .nest("/api", api_routes)

@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use crate::strage::history::HistoryStore;
+use crate::storage::HistoryStore;
 use crate::ai::client::AiClient;
 use crate::search::WebSearchClient;
 

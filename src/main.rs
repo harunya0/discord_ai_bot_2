@@ -1,27 +1,25 @@
-mod bot;
 mod ai;
-mod strage;
-mod rag;
+mod bot;
 mod search;
+mod storage;
 mod web;
 
-use twilight_gateway::{Intents, Shard, ShardId, StreamExt, EventTypeFlags, Event};
-use twilight_http::Client as HttpClient;
-use twilight_model::id::Id;
-use twilight_model::id::marker::UserMarker;
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
-use std::collections::HashMap;
+use std::time::Instant;
 use tokio::sync::RwLock;
+use twilight_gateway::{Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt};
+use twilight_http::Client as HttpClient;
+use twilight_model::id::marker::UserMarker;
+use twilight_model::id::Id;
+
 use ai::client::AiClient;
 use ai::openai::OpenAiClient;
-use ai::embedding::EmbeddingClient;
-use strage::history::HistoryStore;
-use gcp_auth::CustomServiceAccount;
-use std::path::Path;
+use bot::BotContext;
 use search::WebSearchClient;
-use web::{AppState, build_router};
-use std::time::Instant;
+use storage::HistoryStore;
+use web::{build_router, AppState};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> anyhow::Result<()> {
@@ -29,32 +27,32 @@ async fn main() -> anyhow::Result<()> {
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKENが見つかりません");
     let guild_id = env::var("DISCORD_GUILD_ID").ok();
     register_commands(&token, guild_id.as_deref()).await?;
-    let credentials_path = env::var("GCP_CREDENTIALS_PATH").expect("GCP_CREDENTIALS_PATHが見つかりません");
+
+    let credentials_path =
+        env::var("GCP_CREDENTIALS_PATH").expect("GCP_CREDENTIALS_PATHが見つかりません");
     let project_id = env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_IDが見つかりません");
     let location = env::var("GCP_LOCATION").unwrap_or_else(|_| "global".to_string());
-    let model = env::var("GCP_MODEL").unwrap_or_else(|_| "gemini-3.1-flash-lite".to_string());
+
     let openai_api_key = env::var("OPENAI_API_KEY").unwrap_or_default();
     let openai_client = Arc::new(OpenAiClient::new(openai_api_key));
-    let channel_sessions: Arc<RwLock<HashMap<u64, String>>> = Arc::new(RwLock::new(HashMap::new()));
+
     let brave_api_key = env::var("BRAVE_API_KEY").unwrap_or_default();
     let search_client = Arc::new(WebSearchClient::new(brave_api_key));
-    
 
-    let ai_client = Arc::new(
-        AiClient::new(&credentials_path, project_id.clone(), location, model).await?
-    );
+    let ai_client = Arc::new(AiClient::new(&credentials_path, project_id, location).await?);
 
-    // Embedding用に別途サービスアカウントを読み込む(AiClient内のものは非公開のため)
-    let embed_service_account = CustomServiceAccount::from_file(Path::new(&credentials_path))?;
-    let embedding_client = Arc::new(EmbeddingClient::new(embed_service_account, project_id));
+    let channel_sessions: Arc<RwLock<HashMap<u64, String>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    let channel_models: Arc<RwLock<HashMap<u64, String>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+
+    // rugst を内包するローカルメモリストア初期化
+    let history_store = Arc::new(HistoryStore::new("./data/history.db")?);
 
     let intents = Intents::GUILDS | Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT;
     let mut shard = Shard::new(ShardId::ONE, token.clone(), intents);
     let http = Arc::new(HttpClient::new(token));
-
     let bot_id: Arc<RwLock<Option<Id<UserMarker>>>> = Arc::new(RwLock::new(None));
-    let history_store = Arc::new(HistoryStore::new("./data/history.db")?);
-    let channel_models: Arc<RwLock<HashMap<u64, String>>> = Arc::new(RwLock::new(HashMap::new()));
 
     let event_types = EventTypeFlags::READY
         | EventTypeFlags::MESSAGE_CREATE
@@ -64,7 +62,6 @@ async fn main() -> anyhow::Result<()> {
     let web_state = AppState {
         ai_client: Arc::clone(&ai_client),
         openai_client: Arc::clone(&openai_client),
-        embedding_client: Arc::clone(&embedding_client),
         history: Arc::clone(&history_store),
         channel_models: Arc::clone(&channel_models),
         channel_sessions: Arc::clone(&channel_sessions),
@@ -77,8 +74,9 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(async move {
         // 127.0.0.1でリッスンし、外部公開はCaddy等のリバースプロキシ経由を想定
-        // (別サービス化したWebフロントエンドはこのAPIをhttps://<公開ドメイン>/api/... で叩く)
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+            .await
+            .expect("Failed to bind to 127.0.0.1:3000");
         println!("Web API listening on 127.0.0.1:3000 (reverse proxy推奨)");
         axum::serve(listener, app).await.unwrap();
     });
@@ -102,21 +100,21 @@ async fn main() -> anyhow::Result<()> {
                 println!("Joined guild: {:?}", guild.id());
             }
             Event::MessageCreate(msg) => {
-                let http = Arc::clone(&http);
-                let ai_client = Arc::clone(&ai_client);
-                let embedding_client = Arc::clone(&embedding_client);
-                let history_store = Arc::clone(&history_store);
-                let bot_id = Arc::clone(&bot_id);
-                let channel_models = Arc::clone(&channel_models);
-                let openai_client = Arc::clone(&openai_client);
-                let channel_sessions = Arc::clone(&channel_sessions);
-                let search_client = Arc::clone(&search_client);
-                tokio::spawn(async move {
-                    let id = *bot_id.read().await;
-                    if let Some(id) = id {
-                        bot::handler::handle_message(msg, http, ai_client, embedding_client, history_store, channel_models, id, openai_client, channel_sessions, search_client).await;
-                    }
-                });
+                let id = *bot_id.read().await;
+                if let Some(bot_user_id) = id {
+                    let ctx = BotContext {
+                        http: Arc::clone(&http),
+                        ai_client: Arc::clone(&ai_client),
+                        openai_client: Arc::clone(&openai_client),
+                        history: Arc::clone(&history_store),
+                        channel_models: Arc::clone(&channel_models),
+                        channel_sessions: Arc::clone(&channel_sessions),
+                        bot_id: bot_user_id,
+                    };
+                    tokio::spawn(async move {
+                        bot::handler::handle_message(msg, ctx).await;
+                    });
+                }
             }
             Event::InteractionCreate(interaction) => {
                 let value = serde_json::to_value(&*interaction).unwrap_or_default();
@@ -126,7 +124,15 @@ async fn main() -> anyhow::Result<()> {
                 let ai_client = Arc::clone(&ai_client);
                 let search_client = Arc::clone(&search_client);
                 tokio::spawn(async move {
-                    bot::interaction::handle_interaction(value, channel_models, channel_sessions, history_store, ai_client, search_client).await;
+                    bot::interaction::handle_interaction(
+                        value,
+                        channel_models,
+                        channel_sessions,
+                        history_store,
+                        ai_client,
+                        search_client,
+                    )
+                    .await;
                 });
             }
             _ => {}
@@ -147,7 +153,9 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
         .json()
         .await?;
 
-    let app_id = app["id"].as_str().ok_or_else(|| anyhow::anyhow!("application idが取得できません"))?;
+    let app_id = app["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("application idが取得できません"))?;
 
     let commands = serde_json::json!([
         {

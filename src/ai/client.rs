@@ -6,7 +6,6 @@ pub struct AiClient {
     service_account: CustomServiceAccount,
     project_id: String,
     location: String,
-    model: String,
     http: reqwest::Client,
 }
 
@@ -15,7 +14,6 @@ impl AiClient {
         credentials_path: &str,
         project_id: String,
         location: String,
-        model: String,
     ) -> anyhow::Result<Self> {
         let service_account = CustomServiceAccount::from_file(Path::new(credentials_path))?;
 
@@ -23,55 +21,53 @@ impl AiClient {
             service_account,
             project_id,
             location,
-            model,
             http: reqwest::Client::new(),
         })
     }
 
-
     pub async fn generate_with_contents(
         &self,
         contents: Vec<serde_json::Value>,
-        model: &str
+        model: &str,
     ) -> anyhow::Result<String> {
-    let scopes = &["https://www.googleapis.com/auth/cloud-platform"];
-    let token = self.service_account.token(scopes).await?;
-
-    let url = format!(
-        "https://aiplatform.googleapis.com/v1/projects/{}/locations/global/publishers/google/models/{}:generateContent",
-        self.project_id, model
-    );
-
-    let body = json!({
-        "contents": contents,
-        "tools": [{ "url_context": {} }]
-    });
-
-    let res = self.http
-        .post(&url)
-        .bearer_auth(token.as_str())
-        .json(&body)
-        .send()
-        .await?;
-
-    let json_res: serde_json::Value = res.json().await?;
-
-    println!("生レスポンス: {}", serde_json::to_string_pretty(&json_res)?);
-
-    let text = json_res["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .unwrap_or("(応答の解析に失敗しました)")
-        .to_string();
-
-    Ok(text)
-    }
-        pub async fn generate_with_search(&self, query: &str, model: &str) -> anyhow::Result<String> {
         let scopes = &["https://www.googleapis.com/auth/cloud-platform"];
         let token = self.service_account.token(scopes).await?;
 
         let url = format!(
-            "https://aiplatform.googleapis.com/v1/projects/{}/locations/global/publishers/google/models/{}:generateContent",
-            self.project_id, model
+            "https://aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:generateContent",
+            self.project_id, self.location, model
+        );
+
+        let body = json!({
+            "contents": contents,
+            "tools": [{ "url_context": {} }]
+        });
+
+        let res = self
+            .http
+            .post(&url)
+            .bearer_auth(token.as_str())
+            .json(&body)
+            .send()
+            .await?;
+
+        let json_res: serde_json::Value = res.json().await?;
+
+        let text = json_res["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .unwrap_or("(応答の解析に失敗しました)")
+            .to_string();
+
+        Ok(text)
+    }
+
+    pub async fn generate_with_search(&self, query: &str, model: &str) -> anyhow::Result<String> {
+        let scopes = &["https://www.googleapis.com/auth/cloud-platform"];
+        let token = self.service_account.token(scopes).await?;
+
+        let url = format!(
+            "https://aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:generateContent",
+            self.project_id, self.location, model
         );
 
         let body = json!({
@@ -82,7 +78,8 @@ impl AiClient {
             "tools": [{ "google_search": {} }]
         });
 
-        let res = self.http
+        let res = self
+            .http
             .post(&url)
             .bearer_auth(token.as_str())
             .json(&body)

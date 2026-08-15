@@ -9,7 +9,7 @@ Discord上でAI（Gemini / GPT）と会話できるBotです。Discordのスラ�
 - **AIとの会話**: Botにメンションすると応答します。Vertex AI経由のGeminiモデル、またはOpenAIのGPTモデルをチャンネルごとに切り替え可能です
 - **画像・ファイル添付**: 画像はそのままAIに渡され、テキスト系ファイル（`.txt`, `.md`, `.py`, `.js`, `.json`など）は内容を読み込んでプロンプトに含めます
 - **返信コンテキスト**: 誰かのメッセージに返信する形でBotにメンションすると、その元メッセージの内容も踏まえて応答します
-- **会話履歴とRAG**: SQLiteに会話履歴とembeddingを保存し、過去の関連する会話を時間経過で重みを弱めながら（decay付き類似度検索）自動的に呼び出します
+- **会話履歴とRAG**: [rugst](https://crates.io/crates/rugst) を用いてローカルで埋め込み（FastEmbed）とSQLite/FTS5ハイブリッド検索・時間減衰（decay）を実行し、過去の関連する会話を自動的に呼び出します
 - **セッション管理**: チャンネルごとに複数の会話セッションを切り替え・削除できます（`/session`コマンド、Web APIでも操作可能）
 - **Web検索**: Brave Search APIによる検索、またはGoogle検索連携済みのAIによる要約回答（`/search`コマンド）
 - **Web API**: 別サービス(フロントエンド)から会話・設定変更ができるAPI（詳細は下記）
@@ -29,7 +29,7 @@ Discord上でAI（Gemini / GPT）と会話できるBotです。Discordのスラ�
 
 - Rust（stable）
 - Discord Botのトークンとアプリケーション
-- GCPプロジェクト + Vertex AI用サービスアカウント（Gemini / embedding用）
+- GCPプロジェクト + Vertex AI用サービスアカウント（Gemini テキスト生成用）
 - （任意）OpenAI APIキー（GPTモデルを使う場合）
 - （任意）Brave Search APIキー（Web検索を使う場合）
 
@@ -70,7 +70,7 @@ cargo build --release
 ./target/release/discord_ai_bot
 ```
 
-起動時にDiscordのスラッシュコマンドが自動登録され、Webサーバーが`0.0.0.0:3000`（アプリ内で固定）で立ち上がります。
+起動時にDiscordのスラッシュコマンドが自動登録され、Webサーバーが`127.0.0.1:3000`で立ち上がります。
 
 ### 4. 動作確認
 
@@ -106,21 +106,23 @@ curl -H "x-api-token: $WEB_API_TOKEN" http://localhost:3000/api/status
 
 ```
 src/
+├── ai/            … Vertex AI(Gemini) / OpenAI クライアント、フォーマット変換
+│   ├── client.rs
+│   ├── convert.rs
+│   ├── mod.rs
+│   └── openai.rs
+├── bot/           … Discordメッセージ/インタラクションのハンドリング
+│   ├── handler.rs
+│   ├── interaction.rs
+│   └── mod.rs
 ├── main.rs        … エントリポイント、Discordイベントループ、スラッシュコマンド登録
-├── bot/           … メッセージ/インタラクションのハンドリング
-├── ai/            … Vertex AI(Gemini) / OpenAI クライアント、embedding、フォーマット変換
-├── rag/           … 類似度検索(コサイン類似度 + 時間減衰)
-├── search/        … Brave Search クライアント
-├── strage/        … SQLiteによる会話履歴の保存・検索
-└── web/           … Web APIサーバー(axum、フロントエンドの静的配信は行わない)
+├── search.rs      … Brave Search クライアント
+├── storage.rs     … rugstを活用したローカルセマンティックメモリストア(FastEmbed + SQLite + FTS5)・セッション管理
+└── web.rs         … Web APIサーバー(axum、フロントエンドの静的配信は行わない)
 data/              … 実行時に会話履歴DB(history.db)が作られる
 ```
 
 フロントエンド(Webコンソール)は別サービスとして分離済みです。旧`static/`配下のHTML/CSS/JSはそちらのリポジトリに移動し、APIの呼び出し先を本サービスの公開URL（例: `https://api.example.com/api/...`）に向けてください。
-
-## 本番環境へのデプロイ
-
-さくらのクラウド・AWSなど、Rocky Linux系のVPSへのデプロイ手順（Caddyによる自動HTTPS化、fail2banでの防御、DuckDNSでのIP更新を含む）をAnsibleでコード化したものを`ansible-iac/`以下に同梱しています。使い方は[`ansible-iac`](https://github.com/harunya0/ansible-iac)を参照してください。
 
 ## ライセンス
 
