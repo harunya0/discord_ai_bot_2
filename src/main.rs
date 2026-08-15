@@ -230,7 +230,7 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
         }
     ]);
 
-    // 1. グローバル登録(常に実行)
+    // グローバル登録(常に実行)
     let global_url = format!("https://discord.com/api/v10/applications/{}/commands", app_id);
     let global_res = client
         .put(&global_url)
@@ -240,7 +240,7 @@ async fn register_commands(token: &str, guild_id: Option<&str>) -> anyhow::Resul
         .await?;
     println!("グローバルコマンド登録結果: {}", global_res.status());
 
-    // 2. GUILD_IDが指定されていれば、追加でギルド登録(即時反映用)
+    // GUILD_IDが指定されていれば、追加でギルド登録(即時反映用)
     if let Some(gid) = guild_id {
         let guild_url = format!(
             "https://discord.com/api/v10/applications/{}/guilds/{}/commands",
